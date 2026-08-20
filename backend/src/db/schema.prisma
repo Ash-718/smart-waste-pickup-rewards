@@ -1,0 +1,142 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  citizen
+  admin
+}
+
+enum WasteType {
+  PAPER_CARDBOARD
+  PLASTIC
+  METAL
+  GLASS
+  E_WASTE
+  MIXED_RECYCLABLES
+}
+
+enum QuantityBand {
+  SMALL
+  MEDIUM
+  LARGE
+}
+
+enum SlotPeriod {
+  MORNING
+  AFTERNOON
+  EVENING
+}
+
+enum PickupStatus {
+  requested
+  assigned
+  completed
+  cancelled
+}
+
+model User {
+  id           String   @id @default(uuid())
+  name         String
+  email        String?  @unique
+  phone        String?  @unique
+  passwordHash String   @map("password_hash")
+  role         Role     @default(citizen)
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  pickups           Pickup[]           @relation("UserPickups")
+  assignedPickups   Pickup[]           @relation("AdminAssignedPickups")
+  pointsLedger      PointsLedger[]
+  userBadges        UserBadge[]
+  rewardRedemptions RewardRedemption[]
+
+  @@map("users")
+}
+
+model Pickup {
+  id              String       @id @default(uuid())
+  userId          String       @map("user_id")
+  user            User         @relation("UserPickups", fields: [userId], references: [id])
+  wasteType       WasteType    @map("waste_type")
+  quantityBand    QuantityBand @map("quantity_band")
+  address         String
+  slotPeriod      SlotPeriod   @map("slot_period")
+  requestedDate   DateTime     @map("requested_date") @db.Date
+  status          PickupStatus @default(requested)
+  photoUrl        String?      @map("photo_url")
+  assignedAdminId String?      @map("assigned_admin_id")
+  assignedAdmin   User?        @relation("AdminAssignedPickups", fields: [assignedAdminId], references: [id])
+  createdAt       DateTime     @default(now()) @map("created_at")
+  updatedAt       DateTime     @updatedAt @map("updated_at")
+
+  pointsLedgerEntry PointsLedger?
+
+  @@index([userId, status])
+  @@index([status])
+  @@map("pickups")
+}
+
+model PointsLedger {
+  id           String   @id @default(uuid())
+  pickupId     String   @unique @map("pickup_id")
+  pickup       Pickup   @relation(fields: [pickupId], references: [id])
+  userId       String   @map("user_id")
+  user         User     @relation(fields: [userId], references: [id])
+  pointsEarned Int      @map("points_earned")
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  @@index([userId])
+  @@map("points_ledger")
+}
+
+model Badge {
+  id          String  @id @default(uuid())
+  name        String  @unique
+  minPoints   Int     @map("min_points")
+  description String?
+
+  userBadges UserBadge[]
+
+  @@map("badges")
+}
+
+model UserBadge {
+  userId   String   @map("user_id")
+  user     User     @relation(fields: [userId], references: [id])
+  badgeId  String   @map("badge_id")
+  badge    Badge    @relation(fields: [badgeId], references: [id])
+  earnedAt DateTime @default(now()) @map("earned_at")
+
+  @@id([userId, badgeId])
+  @@map("user_badges")
+}
+
+model Reward {
+  id             String  @id @default(uuid())
+  name           String
+  pointsRequired Int     @map("points_required")
+  stock          Int
+  description    String?
+
+  redemptions RewardRedemption[]
+
+  @@map("rewards")
+}
+
+model RewardRedemption {
+  id             String   @id @default(uuid())
+  userId         String   @map("user_id")
+  user           User     @relation(fields: [userId], references: [id])
+  rewardId       String   @map("reward_id")
+  reward         Reward   @relation(fields: [rewardId], references: [id])
+  pointsSpent    Int      @map("points_spent")
+  redemptionCode String   @unique @map("redemption_code")
+  redeemedAt     DateTime @default(now()) @map("redeemed_at")
+
+  @@map("reward_redemptions")
+}

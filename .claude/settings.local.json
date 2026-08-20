@@ -1,0 +1,34 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm install *)",
+      "Bash(npm audit *)",
+      "Bash(npx prisma *)",
+      "Bash(winget --version)",
+      "Bash(where psql *)",
+      "Bash(winget list *)",
+      "Bash(winget install *)",
+      "Bash(npm create *)",
+      "Bash(ls -la \"c:\\\\Users\\\\Ashmit\\\\OneDrive\\\\Desktop\\\\NEW_MINI_PROJECT_APP\\\\admin-dashboard-tmp\" && mv \"c:\\\\Users\\\\Ashmit\\\\OneDrive\\\\Desktop\\\\NEW_MINI_PROJECT_APP\\\\admin-dashboard-tmp\"/* \"c:\\\\Users\\\\Ashmit\\\\OneDrive\\\\Desktop\\\\NEW_MINI_PROJECT_APP\\\\admin-dashboard-tmp\"/.[!.]* \"c:\\\\Users\\\\Ashmit\\\\OneDrive\\\\Desktop\\\\NEW_MINI_PROJECT_APP\\\\admin-dashboard\"/ 2>&1; ls -la \"c:\\\\Users\\\\Ashmit\\\\OneDrive\\\\Desktop\\\\NEW_MINI_PROJECT_APP\\\\admin-dashboard\")",
+      "Bash(\"/c/Program Files/PostgreSQL/17/bin/psql\" --version)",
+      "Bash(export PGCLIENTENCODING=UTF8)",
+      "Bash(\"/c/Program Files/PostgreSQL/17/bin/psql\" -U postgres -h localhost -c \"SELECT 1;\")",
+      "Read(//c/Program Files/PostgreSQL/17/data/**)",
+      "Bash(grep -v \"^$\")",
+      "Bash(cp \"/c/Program Files/PostgreSQL/17/data/pg_hba.conf\" \"/c/Program Files/PostgreSQL/17/data/pg_hba.conf.bak\" 2>&1 && echo \"backup ok\")",
+      "PowerShell(Restart-Service postgresql-x64-17 -Force)",
+      "PowerShell(Get-Service postgresql-x64-17)",
+      "Bash(\"/c/Program Files/PostgreSQL/17/bin/pg_ctl\" reload -D \"/c/Program Files/PostgreSQL/17/data\")",
+      "Bash(net stop *)",
+      "Bash(net start *)",
+      "Bash(rm -f App.css assets/react.svg assets/hero.png)",
+      "Bash(rmdir assets *)",
+      "Bash(mkdir -p pages components api context lib)",
+      "Bash(node scripts/validate_palette.js \"#2a78d6,#eb6834,#1baf7a,#eda100,#e87ba4,#008300\" --mode light)"
+    ],
+    "additionalDirectories": [
+      "c:\\Users\\Ashmit\\OneDrive\\Desktop\\NEW_MINI_PROJECT_APP\\admin-dashboard-tmp",
+      "C:\\Program Files\\PostgreSQL\\17\\data"
+    ]
+  }
+}
