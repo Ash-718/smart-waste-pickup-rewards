@@ -27,15 +27,29 @@ function errorHandler(err, req, res, next) {
     return res.status(409).json({ error: "That conflicted with another update — please try again" });
   }
 
-  if (err.name === "MulterError" || err.message.startsWith("Only image uploads")) {
+  if (err.name === "MulterError" || (err.message && err.message.startsWith("Only image uploads"))) {
     return res.status(400).json({ error: err.message });
   }
 
-  const status = err.status || 500;
-  if (status === 500) {
-    console.error(err);
+  if (err instanceof HttpError) {
+    return res.status(err.status).json({ error: err.message });
   }
-  res.status(status).json({ error: err.message || "Internal server error" });
+
+  // Handle database connection / initialization errors cleanly
+  if (
+    err.code === "P1000" ||
+    err.code === "P1001" ||
+    err.code === "P1002" ||
+    err.code === "P1003" ||
+    err.name === "PrismaClientInitializationError"
+  ) {
+    console.error("[Database Connection Error]", err);
+    return res.status(503).json({ error: "Unable to connect to the server. Please try again." });
+  }
+
+  // Any other unexpected server or database errors
+  console.error("[Unhandled Server Error]", err);
+  return res.status(500).json({ error: "Something went wrong. Please try again." });
 }
 
 function asyncHandler(fn) {

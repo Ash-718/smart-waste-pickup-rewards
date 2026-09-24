@@ -10,9 +10,14 @@ class ApiError extends Error {
 }
 
 let authToken = null;
+let onUnauthorizedHandler = null;
 
 function setAuthToken(token) {
   authToken = token;
+}
+
+function setOnUnauthorized(handler) {
+  onUnauthorizedHandler = handler;
 }
 
 async function apiFetch(path, { method = "GET", body, isFormData = false } = {}) {
@@ -39,10 +44,13 @@ async function apiFetch(path, { method = "GET", body, isFormData = false } = {})
       signal: controller.signal,
     });
   } catch (err) {
+    if (err instanceof ApiError) {
+      throw err;
+    }
     if (err.name === "AbortError") {
       throw new ApiError("The WasteWise server took too long to respond. Try again.", 0);
     }
-    throw new ApiError("Can't reach the WasteWise server. Check your connection.", 0);
+    throw new ApiError("Unable to connect to the server. Please try again.", 0);
   } finally {
     clearTimeout(timeout);
   }
@@ -51,9 +59,13 @@ async function apiFetch(path, { method = "GET", body, isFormData = false } = {})
   const data = contentType.includes("application/json") ? await res.json() : null;
 
   if (!res.ok) {
+    if (res.status === 401 && onUnauthorizedHandler && authToken) {
+      onUnauthorizedHandler();
+    }
     throw new ApiError(data?.error || `Request failed (${res.status})`, res.status, data?.details);
   }
   return data;
 }
 
-export { apiFetch, setAuthToken, ApiError };
+export { apiFetch, setAuthToken, setOnUnauthorized, ApiError };
+

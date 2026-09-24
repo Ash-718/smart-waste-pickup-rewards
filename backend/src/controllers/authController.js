@@ -47,10 +47,10 @@ const login = asyncHandler(async (req, res) => {
   const user = await prisma.user.findFirst({
     where: data.email ? { email: data.email } : { phone: data.phone },
   });
-  if (!user) throw new HttpError(401, "Invalid credentials");
+  if (!user) throw new HttpError(401, "Invalid email or password");
 
   const valid = await bcrypt.compare(data.password, user.passwordHash);
-  if (!valid) throw new HttpError(401, "Invalid credentials");
+  if (!valid) throw new HttpError(401, "Invalid email or password");
 
   const token = signToken(user);
   res.json({ token, user: toPublicUser(user) });

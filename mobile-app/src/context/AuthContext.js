@@ -1,7 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import * as tokenStorage from "../lib/tokenStorage";
-import { setAuthToken } from "../lib/apiClient";
+import { setAuthToken, setOnUnauthorized } from "../lib/apiClient";
 import { login as loginRequest, register as registerRequest, me as meRequest } from "../api/auth";
 
 const TOKEN_KEY = "wastewise_token";
@@ -13,6 +13,19 @@ export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
   // "loading" while restoring a saved session on launch, then "idle".
   const [status, setStatus] = useState("loading");
+
+  const logout = useCallback(async () => {
+    await tokenStorage.deleteItem(TOKEN_KEY);
+    setAuthToken(null);
+    setUser(null);
+    queryClient.clear();
+  }, [queryClient]);
+
+  useEffect(() => {
+    setOnUnauthorized(() => {
+      logout();
+    });
+  }, [logout]);
 
   useEffect(() => {
     (async () => {
@@ -55,12 +68,6 @@ export function AuthProvider({ children }) {
     return data.user;
   }, []);
 
-  const logout = useCallback(async () => {
-    await tokenStorage.deleteItem(TOKEN_KEY);
-    setAuthToken(null);
-    setUser(null);
-    queryClient.clear();
-  }, [queryClient]);
 
   const value = useMemo(
     () => ({ user, status, login, register, logout }),
