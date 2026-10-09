@@ -43,20 +43,7 @@ export default function BookPickupScreen({ navigation }) {
     },
   });
 
-  async function handlePickPhoto() {
-    const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (!permission.granted) {
-      setError("Photo library access is needed to attach a picture.");
-      return;
-    }
-
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ["images"],
-      quality: 0.7,
-    });
-    if (result.canceled) return;
-
-    const asset = result.assets[0];
+  async function processSelectedAsset(asset) {
     setPhotoPreviewUri(asset.uri);
     setPhotoUrl(null);
     setError(null);
@@ -65,9 +52,57 @@ export default function BookPickupScreen({ navigation }) {
       const uploaded = await uploadMutation.mutateAsync(asset);
       setPhotoUrl(uploaded.photoUrl);
     } catch (err) {
-      setError(err.message);
-      setPhotoPreviewUri(null);
+      setError(err.message || "Failed to upload photo. You can try retaking it.");
     }
+  }
+
+  async function handleTakePhoto() {
+    setError(null);
+    try {
+      const permission = await ImagePicker.requestCameraPermissionsAsync();
+      if (!permission.granted) {
+        setError("Camera permission is required to take a live photo.");
+        return;
+      }
+
+      const result = await ImagePicker.launchCameraAsync({
+        mediaTypes: ["images"],
+        quality: 0.7,
+        allowsEditing: true,
+      });
+
+      if (result.canceled || !result.assets?.length) return;
+      await processSelectedAsset(result.assets[0]);
+    } catch (err) {
+      setError("Unable to open camera: " + err.message);
+    }
+  }
+
+  async function handlePickGallery() {
+    setError(null);
+    try {
+      const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (!permission.granted) {
+        setError("Photo library access is needed to select an image.");
+        return;
+      }
+
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ["images"],
+        quality: 0.7,
+        allowsEditing: true,
+      });
+
+      if (result.canceled || !result.assets?.length) return;
+      await processSelectedAsset(result.assets[0]);
+    } catch (err) {
+      setError("Unable to open gallery: " + err.message);
+    }
+  }
+
+  function handleRemovePhoto() {
+    setPhotoPreviewUri(null);
+    setPhotoUrl(null);
   }
 
   function handleSubmit() {
@@ -121,10 +156,6 @@ export default function BookPickupScreen({ navigation }) {
       <View style={styles.field}>
         <Text style={styles.label}>Pickup date</Text>
         {Platform.OS === "ios" ? (
-          // "compact" renders as a self-contained button that opens its own
-          // popover — unlike "default" on iOS, it doesn't need us to manage
-          // show/hide state, which is what let the old picker dismiss itself
-          // on the first wheel tick before a date could be chosen.
           <DateTimePicker
             value={requestedDate}
             mode="date"
@@ -156,25 +187,64 @@ export default function BookPickupScreen({ navigation }) {
       </View>
 
       <View style={styles.field}>
-        <Text style={styles.label}>Photo (optional)</Text>
+        <Text style={styles.label}>Photo of recyclable waste (optional)</Text>
         {photoPreviewUri ? (
-          <View>
+          <View style={styles.previewContainer}>
             <Image source={{ uri: photoPreviewUri }} style={styles.photo} resizeMode="cover" />
             {uploadMutation.isPending && (
               <View style={styles.photoOverlay}>
                 <ActivityIndicator color={colors.white} />
+                <Text style={styles.uploadingText}>Uploading photo…</Text>
               </View>
+            )}
+            <View style={styles.photoActionRow}>
+              <Pressable
+                style={[styles.smallBtn, styles.retakeBtn]}
+                onPress={handleTakePhoto}
+                disabled={uploadMutation.isPending}
+              >
+                <Text style={styles.smallBtnText}>📷 Retake</Text>
+              </Pressable>
+              <Pressable
+                style={[styles.smallBtn, styles.galleryBtn]}
+                onPress={handlePickGallery}
+                disabled={uploadMutation.isPending}
+              >
+                <Text style={styles.smallBtnText}>🖼️ Choose Other</Text>
+              </Pressable>
+              <Pressable
+                style={[styles.smallBtn, styles.removeBtn]}
+                onPress={handleRemovePhoto}
+                disabled={uploadMutation.isPending}
+              >
+                <Text style={[styles.smallBtnText, styles.removeBtnText]}>🗑️ Remove</Text>
+              </Pressable>
+            </View>
+            {photoUrl && (
+              <Text style={styles.uploadedBadge}>✓ Photo uploaded & attached successfully</Text>
             )}
           </View>
         ) : (
-          <Pressable style={styles.photoButton} onPress={handlePickPhoto}>
-            <Text style={styles.photoButtonText}>Add a photo</Text>
-          </Pressable>
+          <View style={styles.photoOptionsGrid}>
+            <Pressable style={styles.photoOptionBox} onPress={handleTakePhoto}>
+              <Text style={styles.photoOptionIcon}>📷</Text>
+              <Text style={styles.photoOptionTitle}>Take Photo</Text>
+              <Text style={styles.photoOptionSubtitle}>Use device camera</Text>
+            </Pressable>
+
+            <Pressable style={styles.photoOptionBox} onPress={handlePickGallery}>
+              <Text style={styles.photoOptionIcon}>🖼️</Text>
+              <Text style={styles.photoOptionTitle}>Upload from Gallery</Text>
+              <Text style={styles.photoOptionSubtitle}>Choose existing image</Text>
+            </Pressable>
+          </View>
         )}
       </View>
 
       {(error || createMutation.isError) && (
-        <Text style={styles.error}>{error || createMutation.error.message}</Text>
+        <View style={styles.errorContainer}>
+          <Text style={styles.error}>{error || createMutation.error.message}</Text>
+        </View>
       )}
 
       <Button
@@ -212,38 +282,105 @@ const styles = StyleSheet.create({
   iosDatePicker: {
     alignSelf: "flex-start",
   },
-  photoButton: {
+  photoOptionsGrid: {
+    flexDirection: "row",
+    gap: 12,
+  },
+  photoOptionBox: {
     alignItems: "center",
+    backgroundColor: colors.white,
     borderColor: colors.neutral200,
     borderRadius: 12,
     borderStyle: "dashed",
-    borderWidth: 1,
-    paddingVertical: 20,
+    borderWidth: 1.5,
+    flex: 1,
+    justifyContent: "center",
+    paddingVertical: 18,
   },
-  photoButtonText: {
-    color: colors.neutral500,
+  photoOptionIcon: {
+    fontSize: 24,
+    marginBottom: 6,
+  },
+  photoOptionTitle: {
+    color: colors.neutral900,
     fontSize: 13,
     fontWeight: "600",
   },
-  photo: {
+  photoOptionSubtitle: {
+    color: colors.neutral500,
+    fontSize: 11,
+    marginTop: 2,
+  },
+  previewContainer: {
+    backgroundColor: colors.white,
+    borderColor: colors.neutral200,
     borderRadius: 12,
-    height: 160,
+    borderWidth: 1,
+    overflow: "hidden",
+    padding: 8,
+  },
+  photo: {
+    borderRadius: 8,
+    height: 180,
     width: "100%",
   },
   photoOverlay: {
     alignItems: "center",
-    backgroundColor: "rgba(0,0,0,0.35)",
-    borderRadius: 12,
-    bottom: 0,
+    backgroundColor: "rgba(0,0,0,0.5)",
+    borderRadius: 8,
+    bottom: 50,
     justifyContent: "center",
-    left: 0,
+    left: 8,
     position: "absolute",
-    right: 0,
-    top: 0,
+    right: 8,
+    top: 8,
+  },
+  uploadingText: {
+    color: colors.white,
+    fontSize: 12,
+    fontWeight: "600",
+    marginTop: 6,
+  },
+  photoActionRow: {
+    flexDirection: "row",
+    gap: 8,
+    marginTop: 10,
+  },
+  smallBtn: {
+    alignItems: "center",
+    backgroundColor: colors.neutral100,
+    borderRadius: 8,
+    flex: 1,
+    paddingVertical: 8,
+  },
+  smallBtnText: {
+    color: colors.neutral700,
+    fontSize: 12,
+    fontWeight: "600",
+  },
+  removeBtn: {
+    backgroundColor: colors.red50,
+  },
+  removeBtnText: {
+    color: colors.red600,
+  },
+  uploadedBadge: {
+    color: colors.brand700,
+    fontSize: 12,
+    fontWeight: "600",
+    marginTop: 8,
+    textAlign: "center",
+  },
+  errorContainer: {
+    backgroundColor: colors.red50,
+    borderColor: colors.red600,
+    borderRadius: 8,
+    borderWidth: 0.5,
+    marginBottom: 12,
+    padding: 10,
   },
   error: {
     color: colors.red600,
     fontSize: 13,
-    marginBottom: 12,
   },
 });

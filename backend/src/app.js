@@ -12,6 +12,7 @@ const adminRoutes = require("./routes/adminRoutes");
 const metaRoutes = require("./routes/metaRoutes");
 const uploadRoutes = require("./routes/uploadRoutes");
 
+const path = require("path");
 const app = express();
 app.disable("x-powered-by");
 
@@ -25,6 +26,7 @@ app.use(
   })
 );
 app.use(express.json());
+app.use("/uploads", express.static(path.join(__dirname, "../uploads")));
 
 app.get("/api/health", (req, res) => res.json({ status: "ok" }));
 

@@ -5,6 +5,7 @@ const STYLES = {
   requested: { bg: colors.amber50, text: colors.amber700 },
   assigned: { bg: colors.blue50, text: colors.blue700 },
   completed: { bg: colors.brand100, text: colors.brand800 },
+  rejected: { bg: colors.red50, text: colors.red600 },
   cancelled: { bg: colors.neutral100, text: colors.neutral600 },
 };
 
@@ -12,6 +13,7 @@ const LABELS = {
   requested: "Requested",
   assigned: "Assigned",
   completed: "Completed",
+  rejected: "Rejected",
   cancelled: "Cancelled",
 };
 

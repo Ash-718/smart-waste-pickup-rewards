@@ -7,6 +7,9 @@ import LoginPage from "./pages/LoginPage";
 import PickupQueuePage from "./pages/PickupQueuePage";
 import PickupDetailPage from "./pages/PickupDetailPage";
 import ImpactDashboardPage from "./pages/ImpactDashboardPage";
+import AnalyticsPage from "./pages/AnalyticsPage";
+import UsersPage from "./pages/UsersPage";
+import RewardsBadgesPage from "./pages/RewardsBadgesPage";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -28,12 +31,15 @@ export default function App() {
                 </ProtectedRoute>
               }
             >
-              <Route index element={<Navigate to="/queue" replace />} />
+              <Route index element={<Navigate to="/dashboard" replace />} />
+              <Route path="/dashboard" element={<ImpactDashboardPage />} />
+              <Route path="/analytics" element={<AnalyticsPage />} />
               <Route path="/queue" element={<PickupQueuePage />} />
               <Route path="/queue/:id" element={<PickupDetailPage />} />
-              <Route path="/dashboard" element={<ImpactDashboardPage />} />
+              <Route path="/users" element={<UsersPage />} />
+              <Route path="/rewards-badges" element={<RewardsBadgesPage />} />
             </Route>
-            <Route path="*" element={<Navigate to="/queue" replace />} />
+            <Route path="*" element={<Navigate to="/dashboard" replace />} />
           </Routes>
         </BrowserRouter>
       </AuthProvider>

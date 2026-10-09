@@ -18,4 +18,26 @@ const list = asyncHandler(async (req, res) => {
   });
 });
 
-module.exports = { list };
+const { createBadgeSchema } = require("../validation/schemas");
+const { HttpError } = require("../middleware/errorHandler");
+
+const create = asyncHandler(async (req, res) => {
+  const data = createBadgeSchema.parse(req.body);
+
+  const existing = await prisma.badge.findUnique({ where: { name: data.name } });
+  if (existing) {
+    throw new HttpError(409, "A badge with this name already exists");
+  }
+
+  const badge = await prisma.badge.create({
+    data: {
+      name: data.name,
+      minPoints: data.minPoints,
+      description: data.description || null,
+    },
+  });
+
+  res.status(201).json({ badge });
+});
+
+module.exports = { list, create };

@@ -1,9 +1,10 @@
 const express = require("express");
-const { list } = require("../controllers/badgeController");
-const { requireAuth } = require("../middleware/auth");
+const { list, create } = require("../controllers/badgeController");
+const { requireAuth, requireRole } = require("../middleware/auth");
 
 const router = express.Router();
 
 router.get("/", requireAuth, list);
+router.post("/", requireAuth, requireRole("admin"), create);
 
 module.exports = router;

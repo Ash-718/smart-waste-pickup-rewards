@@ -1,4 +1,41 @@
-const API_BASE_URL = process.env.EXPO_PUBLIC_API_BASE_URL || "http://localhost:4000/api";
+import Constants from "expo-constants";
+import { Platform } from "react-native";
+
+function resolveApiBaseUrl() {
+  const envUrl = process.env.EXPO_PUBLIC_API_BASE_URL;
+
+  // If envUrl is set to a remote domain (not localhost), use it directly
+  if (envUrl && !envUrl.includes("localhost") && !envUrl.includes("127.0.0.1")) {
+    return envUrl;
+  }
+
+  // Web environment can always access localhost
+  if (Platform.OS === "web") {
+    return envUrl || "http://localhost:4000/api";
+  }
+
+  // On physical device or native runtime, resolve the dev machine IP via Expo packager hostUri
+  const hostUri =
+    Constants.expoConfig?.hostUri ||
+    Constants.manifest?.debuggerHost ||
+    Constants.manifest2?.extra?.expoClient?.hostUri;
+
+  if (hostUri) {
+    const ip = hostUri.split(":")[0];
+    if (ip && ip !== "localhost" && ip !== "127.0.0.1") {
+      return `http://${ip}:4000/api`;
+    }
+  }
+
+  // Android emulator fallback
+  if (Platform.OS === "android") {
+    return "http://10.0.2.2:4000/api";
+  }
+
+  return envUrl || "http://localhost:4000/api";
+}
+
+const API_BASE_URL = resolveApiBaseUrl();
 const REQUEST_TIMEOUT_MS = 15000;
 
 class ApiError extends Error {

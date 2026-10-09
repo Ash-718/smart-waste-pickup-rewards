@@ -13,6 +13,7 @@ export function assignPickup(id, payload = {}) {
   return apiFetch(`/pickups/${id}/assign`, { method: "PATCH", body: payload });
 }
 
-export function updatePickupStatus(id, status) {
-  return apiFetch(`/pickups/${id}/status`, { method: "PATCH", body: { status } });
+export function updatePickupStatus(id, statusOrPayload) {
+  const body = typeof statusOrPayload === "string" ? { status: statusOrPayload } : statusOrPayload;
+  return apiFetch(`/pickups/${id}/status`, { method: "PATCH", body });
 }

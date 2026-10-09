@@ -2,15 +2,18 @@ import { NavLink, Outlet } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 
 const NAV_ITEMS = [
-  { to: "/queue", label: "Pickup Queue" },
-  { to: "/dashboard", label: "Impact Dashboard" },
+  { to: "/dashboard", label: "Dashboard Overview", icon: "📊" },
+  { to: "/analytics", label: "Analytics & Trends", icon: "📈" },
+  { to: "/queue", label: "Pickup Queue", icon: "🚚" },
+  { to: "/users", label: "Citizens & Impact", icon: "👥" },
+  { to: "/rewards-badges", label: "Rewards & Staff", icon: "🎁" },
 ];
 
 function navLinkClass({ isActive }) {
   return [
-    "block rounded-lg px-3 py-2 text-sm font-medium transition-colors",
+    "flex items-center gap-2.5 rounded-xl px-3 py-2.5 text-xs font-semibold transition-all",
     isActive
-      ? "bg-brand-100 text-brand-800"
+      ? "bg-emerald-50 text-emerald-900 border border-emerald-200/60 shadow-2xs font-bold"
       : "text-neutral-600 hover:bg-neutral-100 hover:text-neutral-900",
   ].join(" ");
 }
@@ -20,17 +23,21 @@ export default function Layout() {
 
   return (
     <div className="min-h-screen bg-[#f8faf9] md:flex">
-      <aside className="border-b border-neutral-200 bg-white md:w-56 md:shrink-0 md:border-b-0 md:border-r">
-        <div className="flex items-center gap-2 px-4 py-4">
-          <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-brand-600 text-sm font-bold text-white">
-            W
+      <aside className="border-b border-neutral-200 bg-white md:w-60 md:shrink-0 md:border-b-0 md:border-r">
+        <div className="flex items-center gap-2.5 px-5 py-5 border-b border-neutral-100">
+          <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-emerald-600 text-base font-extrabold text-white shadow-xs">
+            🌱
           </span>
-          <span className="text-sm font-semibold text-neutral-900">WasteWise Admin</span>
+          <div>
+            <span className="text-sm font-bold text-neutral-900 block leading-tight">WasteWise Admin</span>
+            <span className="text-[10px] text-emerald-700 font-medium">Pruthvi Foundation</span>
+          </div>
         </div>
-        <nav className="space-y-1 px-3 pb-4">
+        <nav className="space-y-1 p-3">
           {NAV_ITEMS.map((item) => (
             <NavLink key={item.to} to={item.to} className={navLinkClass}>
-              {item.label}
+              <span className="text-sm">{item.icon}</span>
+              <span>{item.label}</span>
             </NavLink>
           ))}
         </nav>

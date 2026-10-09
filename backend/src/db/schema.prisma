@@ -10,6 +10,7 @@ datasource db {
 enum Role {
   citizen
   admin
+  collector
 }
 
 enum WasteType {
@@ -38,6 +39,7 @@ enum PickupStatus {
   assigned
   completed
   cancelled
+  rejected
 }
 
 model User {
@@ -64,13 +66,16 @@ model Pickup {
   user            User         @relation("UserPickups", fields: [userId], references: [id])
   wasteType       WasteType    @map("waste_type")
   quantityBand    QuantityBand @map("quantity_band")
+  wasteQuantity   Float?       @map("waste_quantity")
   address         String
   slotPeriod      SlotPeriod   @map("slot_period")
   requestedDate   DateTime     @map("requested_date") @db.Date
   status          PickupStatus @default(requested)
+  rejectionReason String?      @map("rejection_reason")
   photoUrl        String?      @map("photo_url")
   assignedAdminId String?      @map("assigned_admin_id")
   assignedAdmin   User?        @relation("AdminAssignedPickups", fields: [assignedAdminId], references: [id])
+  assignedAt      DateTime?    @map("assigned_at")
   createdAt       DateTime     @default(now()) @map("created_at")
   updatedAt       DateTime     @updatedAt @map("updated_at")
 

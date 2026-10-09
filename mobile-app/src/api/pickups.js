@@ -12,3 +12,7 @@ export function getPickup(id) {
 export function createPickup(payload) {
   return apiFetch("/pickups", { method: "POST", body: payload });
 }
+
+export function getMyImpact() {
+  return apiFetch("/pickups/my-impact");
+}

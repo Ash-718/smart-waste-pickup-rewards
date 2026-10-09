@@ -15,6 +15,7 @@ export default function Screen({ children, scroll = true, onRefresh, refreshing 
     <SafeAreaView style={styles.safe} edges={["top", "left", "right"]}>
       <ScrollView
         contentContainerStyle={styles.padded}
+        keyboardShouldPersistTaps="handled"
         refreshControl={
           onRefresh ? (
             <RefreshControl refreshing={!!refreshing} onRefresh={onRefresh} tintColor={colors.brand600} />

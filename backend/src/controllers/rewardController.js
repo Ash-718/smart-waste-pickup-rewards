@@ -45,4 +45,21 @@ const redeem = asyncHandler(async (req, res) => {
   res.status(201).json({ redemption: result });
 });
 
-module.exports = { list, redeem };
+const { createRewardSchema } = require("../validation/schemas");
+
+const create = asyncHandler(async (req, res) => {
+  const data = createRewardSchema.parse(req.body);
+
+  const reward = await prisma.reward.create({
+    data: {
+      name: data.name,
+      pointsRequired: data.pointsRequired,
+      stock: data.stock,
+      description: data.description || null,
+    },
+  });
+
+  res.status(201).json({ reward });
+});
+
+module.exports = { list, redeem, create };

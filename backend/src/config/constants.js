@@ -22,7 +22,17 @@ const SLOT_PERIODS = [
   { value: "EVENING", label: "Evening (4-7 PM)" },
 ];
 
-const PICKUP_STATUSES = ["requested", "assigned", "completed", "cancelled"];
+const PICKUP_STATUSES = ["requested", "assigned", "completed", "cancelled", "rejected"];
+
+const ESTIMATED_KG_FOR_BAND = {
+  SMALL: 1.5,
+  MEDIUM: 3.5,
+  LARGE: 7.5,
+};
+
+function estimatedWasteKg(band) {
+  return ESTIMATED_KG_FOR_BAND[band] || 2.0;
+}
 
 // Points awarded on pickup completion = QUANTITY_BANDS[band].points
 function pointsForQuantityBand(band) {
@@ -71,5 +81,7 @@ module.exports = {
   BADGES,
   STARTER_REWARDS,
   REMINDER_THRESHOLD_DAYS,
+  ESTIMATED_KG_FOR_BAND,
+  estimatedWasteKg,
   pointsForQuantityBand,
 };

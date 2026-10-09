@@ -11,11 +11,11 @@ import { useMeta } from "../hooks/useMeta";
 import { listPickups } from "../api/pickups";
 import { colors } from "../theme/colors";
 
-const STATUS_FILTERS = ["all", "requested", "assigned", "completed", "cancelled"];
+const STATUS_FILTERS = ["all", "requested", "assigned", "completed", "rejected", "cancelled"];
 
 export default function MyPickupsScreen({ navigation }) {
   const [statusFilter, setStatusFilter] = useState("all");
-  const { wasteTypeLabel, slotPeriodLabel } = useMeta();
+  const { wasteTypeLabel, slotPeriodLabel, quantityBandLabel } = useMeta();
 
   const { data, isLoading, isError, error, refetch, isFetching } = useQuery({
     queryKey: ["pickups", statusFilter],
@@ -28,7 +28,7 @@ export default function MyPickupsScreen({ navigation }) {
     <Screen onRefresh={refetch} refreshing={isFetching}>
       <View style={styles.header}>
         <Text style={styles.title}>My Pickups</Text>
-        <Button title="Book new" onPress={() => navigation.navigate("BookPickup")} />
+        <Button title="+ Book new" onPress={() => navigation.navigate("BookPickup")} />
       </View>
 
       <View style={styles.filters}>
@@ -65,12 +65,31 @@ export default function MyPickupsScreen({ navigation }) {
               <Text style={styles.pickupType}>{wasteTypeLabel(pickup.wasteType)}</Text>
               <StatusBadge status={pickup.status} />
             </View>
+
             <Text style={styles.pickupMeta}>
-              {slotPeriodLabel(pickup.slotPeriod)} · {new Date(pickup.requestedDate).toLocaleDateString()}
+              {quantityBandLabel(pickup.quantityBand)} · {slotPeriodLabel(pickup.slotPeriod)} ·{" "}
+              {new Date(pickup.requestedDate).toLocaleDateString()}
             </Text>
+
             <Text style={styles.pickupAddress} numberOfLines={1}>
               {pickup.address}
             </Text>
+
+            {pickup.status === "assigned" && pickup.assignedAdmin && (
+              <View style={styles.assignedSnippet}>
+                <Text style={styles.assignedSnippetText} numberOfLines={1}>
+                  👷 Collector: {pickup.assignedAdmin.name}
+                </Text>
+              </View>
+            )}
+
+            {pickup.status === "rejected" && pickup.rejectionReason && (
+              <View style={styles.rejectionSnippet}>
+                <Text style={styles.rejectionSnippetText} numberOfLines={2}>
+                  Reason: {pickup.rejectionReason}
+                </Text>
+              </View>
+            )}
           </Card>
         </Pressable>
       ))}
@@ -142,5 +161,33 @@ const styles = StyleSheet.create({
     color: colors.neutral400,
     fontSize: 12,
     marginTop: 2,
+  },
+  assignedSnippet: {
+    backgroundColor: colors.brand50,
+    borderColor: colors.brand500,
+    borderRadius: 6,
+    borderWidth: 0.5,
+    marginTop: 8,
+    paddingHorizontal: 8,
+    paddingVertical: 5,
+  },
+  assignedSnippetText: {
+    color: colors.brand700,
+    fontSize: 12,
+    fontWeight: "600",
+  },
+  rejectionSnippet: {
+    backgroundColor: colors.red50,
+    borderColor: colors.red600,
+    borderRadius: 6,
+    borderWidth: 0.5,
+    marginTop: 8,
+    paddingHorizontal: 8,
+    paddingVertical: 5,
+  },
+  rejectionSnippetText: {
+    color: colors.red700,
+    fontSize: 12,
+    fontWeight: "500",
   },
 });

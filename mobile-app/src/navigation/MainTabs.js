@@ -2,6 +2,7 @@ import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
 import { Text } from "react-native";
 import HomeScreen from "../screens/HomeScreen";
 import MyPickupsScreen from "../screens/MyPickupsScreen";
+import ImpactScreen from "../screens/ImpactScreen";
 import RewardsScreen from "../screens/RewardsScreen";
 import BadgesScreen from "../screens/BadgesScreen";
 import { colors } from "../theme/colors";
@@ -11,6 +12,7 @@ const Tab = createBottomTabNavigator();
 const ICONS = {
   Home: "🏠",
   Pickups: "🚚",
+  Impact: "🌱",
   Rewards: "🎁",
   Badges: "🏅",
 };
@@ -31,6 +33,7 @@ export default function MainTabs() {
     >
       <Tab.Screen name="Home" component={HomeScreen} />
       <Tab.Screen name="Pickups" component={MyPickupsScreen} options={{ title: "My Pickups" }} />
+      <Tab.Screen name="Impact" component={ImpactScreen} options={{ title: "My Impact" }} />
       <Tab.Screen name="Rewards" component={RewardsScreen} />
       <Tab.Screen name="Badges" component={BadgesScreen} />
     </Tab.Navigator>

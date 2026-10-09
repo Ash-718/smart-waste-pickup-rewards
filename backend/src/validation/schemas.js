@@ -36,6 +36,7 @@ const loginSchema = z
 const createPickupSchema = z.object({
   wasteType: z.enum(wasteTypeValues),
   quantityBand: z.enum(quantityBandValues),
+  wasteQuantity: z.number().positive().optional(),
   address: z.string().trim().min(1, "Address is required"),
   slotPeriod: z.enum(slotPeriodValues),
   requestedDate: z.coerce.date(),
@@ -44,15 +45,56 @@ const createPickupSchema = z.object({
 
 const assignPickupSchema = z.object({
   adminId: z.string().uuid().optional(),
+  collectorId: z.string().uuid().optional(),
   slotPeriod: z.enum(slotPeriodValues).optional(),
   requestedDate: z.coerce.date().optional(),
 });
 
-const updateStatusSchema = z.object({
-  status: z.enum(PICKUP_STATUSES),
-});
+const updateStatusSchema = z
+  .object({
+    status: z.enum(PICKUP_STATUSES),
+    rejectionReason: z.string().trim().optional(),
+    wasteQuantity: z.number().positive().optional(),
+  })
+  .refine(
+    (data) => {
+      if (data.status === "rejected") {
+        return !!data.rejectionReason && data.rejectionReason.length > 0;
+      }
+      return true;
+    },
+    {
+      message: "Rejection reason is mandatory when rejecting a pickup",
+      path: ["rejectionReason"],
+    }
+  );
 
 const redeemRewardSchema = z.object({});
+
+const createRewardSchema = z.object({
+  name: z.string().trim().min(1, "Reward name is required"),
+  pointsRequired: z.number().int().positive("Points required must be positive"),
+  stock: z.number().int().min(0, "Stock must be 0 or more"),
+  description: z.string().trim().optional(),
+});
+
+const createBadgeSchema = z.object({
+  name: z.string().trim().min(1, "Badge name is required"),
+  minPoints: z.number().int().positive("Minimum points must be positive"),
+  description: z.string().trim().optional(),
+});
+
+const createCollectorSchema = z
+  .object({
+    name: z.string().trim().min(1, "Name is required"),
+    email: z.string().trim().email().optional(),
+    phone: z.string().trim().min(6).optional(),
+    password: z.string().min(6, "Password must be at least 6 characters"),
+  })
+  .refine((data) => data.email || data.phone, {
+    message: "Either email or phone is required",
+    path: ["email"],
+  });
 
 module.exports = {
   registerSchema,
@@ -61,4 +103,7 @@ module.exports = {
   assignPickupSchema,
   updateStatusSchema,
   redeemRewardSchema,
+  createRewardSchema,
+  createBadgeSchema,
+  createCollectorSchema,
 };

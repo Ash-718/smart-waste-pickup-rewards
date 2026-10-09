@@ -2,6 +2,7 @@ import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import MainTabs from "./MainTabs";
 import BookPickupScreen from "../screens/BookPickupScreen";
 import PickupDetailScreen from "../screens/PickupDetailScreen";
+import ImpactScreen from "../screens/ImpactScreen";
 import { colors } from "../theme/colors";
 
 const Stack = createNativeStackNavigator();
@@ -25,6 +26,11 @@ export default function AppNavigator() {
         name="PickupDetail"
         component={PickupDetailScreen}
         options={{ title: "Pickup Details" }}
+      />
+      <Stack.Screen
+        name="Impact"
+        component={ImpactScreen}
+        options={{ title: "Environmental Impact" }}
       />
     </Stack.Navigator>
   );

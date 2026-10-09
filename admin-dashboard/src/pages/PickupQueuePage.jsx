@@ -1,48 +1,51 @@
 import { useState } from "react";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
-import { listPickups, assignPickup } from "../api/pickups";
+import { listPickups } from "../api/pickups";
 import { useMeta } from "../hooks/useMeta";
 import StatusBadge from "../components/StatusBadge";
 import EmptyState from "../components/EmptyState";
 import ErrorState from "../components/ErrorState";
 import { TableSkeleton } from "../components/Skeleton";
+import AssignCollectorModal from "../components/AssignCollectorModal";
+import RejectPickupModal from "../components/RejectPickupModal";
 
-const STATUS_FILTERS = ["all", "requested", "assigned", "completed", "cancelled"];
+const STATUS_FILTERS = ["all", "requested", "assigned", "completed", "rejected", "cancelled"];
 
 export default function PickupQueuePage() {
   const [statusFilter, setStatusFilter] = useState("all");
+  const [assignPickupTarget, setAssignPickupTarget] = useState(null);
+  const [rejectPickupTarget, setRejectPickupTarget] = useState(null);
+
   const { wasteTypeLabel, quantityBandLabel, slotPeriodLabel } = useMeta();
-  const queryClient = useQueryClient();
 
   const { data, isLoading, isError, error, refetch } = useQuery({
     queryKey: ["pickups", statusFilter],
     queryFn: () => listPickups(statusFilter),
   });
 
-  const assignMutation = useMutation({
-    mutationFn: (id) => assignPickup(id),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["pickups"] }),
-  });
-
   const pickups = data?.pickups || [];
 
   return (
-    <div>
-      <div className="mb-6 flex items-center justify-between">
+    <div className="space-y-6">
+      <div className="flex flex-wrap items-center justify-between gap-4">
         <div>
-          <h1 className="text-lg font-semibold text-neutral-900">Pickup Queue</h1>
-          <p className="text-sm text-neutral-500">View, assign, and track recyclable pickup requests.</p>
+          <h1 className="text-xl font-bold text-neutral-900">Pickup Operations Queue</h1>
+          <p className="text-sm text-neutral-500">
+            Dispatch collectors, review submitted photos, approve or reject recyclable waste requests.
+          </p>
         </div>
-        <div className="flex gap-1 rounded-lg border border-neutral-200 bg-white p-1">
+
+        {/* Filters */}
+        <div className="flex flex-wrap gap-1 rounded-xl border border-neutral-200 bg-white p-1 shadow-xs">
           {STATUS_FILTERS.map((s) => (
             <button
               key={s}
               onClick={() => setStatusFilter(s)}
-              className={`rounded-md px-3 py-1.5 text-sm font-medium capitalize transition-colors ${
+              className={`rounded-lg px-3 py-1.5 text-xs font-semibold capitalize transition-colors ${
                 statusFilter === s
-                  ? "bg-brand-600 text-white"
-                  : "text-neutral-600 hover:bg-neutral-100"
+                  ? "bg-emerald-600 text-white shadow-xs"
+                  : "text-neutral-600 hover:bg-neutral-100 hover:text-neutral-900"
               }`}
             >
               {s}
@@ -56,58 +59,92 @@ export default function PickupQueuePage() {
 
       {!isLoading && !isError && pickups.length === 0 && (
         <EmptyState
-          title="No pickups here"
-          description="There are no pickup requests matching this filter yet."
+          title="No pickups found"
+          description={`There are currently no pickup requests with status "${statusFilter}".`}
         />
       )}
 
       {!isLoading && !isError && pickups.length > 0 && (
-        <div className="overflow-hidden rounded-xl border border-neutral-200 bg-white">
-          <table className="min-w-full divide-y divide-neutral-100 text-sm">
-            <thead className="bg-neutral-50 text-left text-xs font-medium uppercase tracking-wide text-neutral-500">
+        <div className="overflow-hidden rounded-2xl border border-neutral-200 bg-white shadow-xs">
+          <table className="min-w-full divide-y divide-neutral-100 text-xs">
+            <thead className="bg-neutral-50 text-left font-semibold text-neutral-600">
               <tr>
                 <th className="px-4 py-3">Citizen</th>
-                <th className="px-4 py-3">Waste Type</th>
-                <th className="px-4 py-3">Quantity</th>
-                <th className="px-4 py-3">Slot</th>
+                <th className="px-4 py-3">Waste & Weight</th>
+                <th className="px-4 py-3">Slot & Date</th>
                 <th className="px-4 py-3">Status</th>
-                <th className="px-4 py-3" />
+                <th className="px-4 py-3">Assigned Staff</th>
+                <th className="px-4 py-3 text-right">Actions</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-neutral-100">
+            <tbody className="divide-y divide-neutral-100 bg-white">
               {pickups.map((p) => (
-                <tr key={p.id} className="hover:bg-neutral-50">
+                <tr key={p.id} className="hover:bg-neutral-50/80 transition-colors">
                   <td className="px-4 py-3">
-                    <div className="font-medium text-neutral-900">{p.user?.name}</div>
-                    <div className="text-xs text-neutral-500">{p.user?.email || p.user?.phone}</div>
+                    <div className="font-semibold text-neutral-900">{p.user?.name}</div>
+                    <div className="text-[11px] text-neutral-500">{p.user?.email || p.user?.phone}</div>
+                    <div className="text-[11px] text-neutral-400 truncate max-w-xs">{p.address}</div>
                   </td>
-                  <td className="px-4 py-3 text-neutral-700">{wasteTypeLabel(p.wasteType)}</td>
-                  <td className="px-4 py-3 text-neutral-700">{quantityBandLabel(p.quantityBand)}</td>
+                  <td className="px-4 py-3">
+                    <div className="font-medium text-neutral-800">{wasteTypeLabel(p.wasteType)}</div>
+                    <div className="text-neutral-500 text-[11px]">
+                      {quantityBandLabel(p.quantityBand)}
+                      {p.wasteQuantity ? ` (${p.wasteQuantity} kg)` : ""}
+                    </div>
+                  </td>
                   <td className="px-4 py-3 text-neutral-700">
-                    {slotPeriodLabel(p.slotPeriod)}
-                    <div className="text-xs text-neutral-400">
+                    <div className="font-medium text-neutral-800">{slotPeriodLabel(p.slotPeriod)}</div>
+                    <div className="text-neutral-400 text-[11px]">
                       {new Date(p.requestedDate).toLocaleDateString()}
                     </div>
                   </td>
                   <td className="px-4 py-3">
                     <StatusBadge status={p.status} />
+                    {p.status === "rejected" && p.rejectionReason && (
+                      <div className="mt-1 max-w-xs text-[11px] text-rose-600 truncate" title={p.rejectionReason}>
+                        Reason: {p.rejectionReason}
+                      </div>
+                    )}
+                  </td>
+                  <td className="px-4 py-3 text-neutral-700">
+                    {p.assignedAdmin ? (
+                      <div>
+                        <span className="font-medium text-neutral-900">{p.assignedAdmin.name}</span>
+                        {p.assignedAt && (
+                          <div className="text-[10px] text-neutral-400">
+                            {new Date(p.assignedAt).toLocaleDateString()}
+                          </div>
+                        )}
+                      </div>
+                    ) : (
+                      <span className="text-neutral-400 italic">Unassigned</span>
+                    )}
                   </td>
                   <td className="px-4 py-3 text-right">
-                    <div className="flex justify-end gap-2">
-                      {p.status === "requested" && (
+                    <div className="flex justify-end items-center gap-1.5">
+                      {(p.status === "requested" || p.status === "assigned") && (
                         <button
-                          onClick={() => assignMutation.mutate(p.id)}
-                          disabled={assignMutation.isPending}
-                          className="rounded-lg border border-brand-200 bg-brand-50 px-3 py-1.5 text-xs font-medium text-brand-700 hover:bg-brand-100 disabled:opacity-60"
+                          onClick={() => setAssignPickupTarget(p)}
+                          className="rounded-lg border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-xs font-semibold text-emerald-800 hover:bg-emerald-100 transition-colors"
                         >
-                          Assign to me
+                          {p.status === "assigned" ? "Reassign" : "Assign"}
                         </button>
                       )}
+
+                      {(p.status === "requested" || p.status === "assigned") && (
+                        <button
+                          onClick={() => setRejectPickupTarget(p)}
+                          className="rounded-lg border border-rose-200 bg-rose-50 px-2.5 py-1 text-xs font-semibold text-rose-700 hover:bg-rose-100 transition-colors"
+                        >
+                          Reject
+                        </button>
+                      )}
+
                       <Link
                         to={`/queue/${p.id}`}
-                        className="rounded-lg border border-neutral-200 px-3 py-1.5 text-xs font-medium text-neutral-600 hover:bg-neutral-50"
+                        className="rounded-lg border border-neutral-200 bg-white px-2.5 py-1 text-xs font-medium text-neutral-700 hover:bg-neutral-50 transition-colors"
                       >
-                        View
+                        Details →
                       </Link>
                     </div>
                   </td>
@@ -116,6 +153,23 @@ export default function PickupQueuePage() {
             </tbody>
           </table>
         </div>
+      )}
+
+      {/* Modals */}
+      {assignPickupTarget && (
+        <AssignCollectorModal
+          pickup={assignPickupTarget}
+          onClose={() => setAssignPickupTarget(null)}
+          onAssigned={() => refetch()}
+        />
+      )}
+
+      {rejectPickupTarget && (
+        <RejectPickupModal
+          pickup={rejectPickupTarget}
+          onClose={() => setRejectPickupTarget(null)}
+          onRejected={() => refetch()}
+        />
       )}
     </div>
   );

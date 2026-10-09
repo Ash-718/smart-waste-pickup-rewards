@@ -46,12 +46,30 @@ export default function PickupDetailScreen({ route }) {
   return (
     <Screen>
       <Card>
-        <View style={styles.header}>
-          <Text style={styles.type}>{wasteTypeLabel(pickup.wasteType)}</Text>
+        <View style={styles.topBar}>
+          <Text style={styles.pickupId}>Pickup #{pickup.id.slice(0, 8).toUpperCase()}</Text>
           <StatusBadge status={pickup.status} />
         </View>
 
-        <Row label="Quantity" value={quantityBandLabel(pickup.quantityBand)} />
+        <View style={styles.header}>
+          <Text style={styles.type}>{wasteTypeLabel(pickup.wasteType)}</Text>
+        </View>
+
+        {pickup.status === "rejected" && (
+          <View style={styles.rejectionCard}>
+            <Text style={styles.rejectionTitle}>⚠️ Rejection Reason</Text>
+            <Text style={styles.rejectionBody}>
+              {pickup.rejectionReason || "No specific reason provided."}
+            </Text>
+          </View>
+        )}
+
+        <Row
+          label="Quantity"
+          value={`${quantityBandLabel(pickup.quantityBand)}${
+            pickup.wasteQuantity ? ` (~${pickup.wasteQuantity} kg)` : ""
+          }`}
+        />
         <Row
           label="Slot"
           value={`${slotPeriodLabel(pickup.slotPeriod)} · ${new Date(
@@ -59,9 +77,16 @@ export default function PickupDetailScreen({ route }) {
           ).toLocaleDateString()}`}
         />
         <Row label="Address" value={pickup.address} />
-        <Row label="Assigned to" value={pickup.assignedAdmin?.name || "Not yet assigned"} />
+        <Row
+          label="Assigned Collector"
+          value={
+            pickup.assignedAdmin
+              ? `${pickup.assignedAdmin.name}${pickup.assignedAdmin.phone ? ` (${pickup.assignedAdmin.phone})` : ""}`
+              : "Not yet assigned"
+          }
+        />
         {pickup.pointsLedgerEntry && (
-          <Row label="Points earned" value={`${pickup.pointsLedgerEntry.pointsEarned}`} />
+          <Row label="Points earned" value={`+${pickup.pointsLedgerEntry.pointsEarned} Green Points`} />
         )}
 
         {pickup.photoUrl && (
@@ -73,11 +98,42 @@ export default function PickupDetailScreen({ route }) {
 }
 
 const styles = StyleSheet.create({
+  topBar: {
+    alignItems: "center",
+    flexDirection: "row",
+    justifyContent: "space-between",
+    marginBottom: 10,
+  },
+  pickupId: {
+    color: colors.neutral500,
+    fontSize: 13,
+    fontWeight: "700",
+    letterSpacing: 0.5,
+  },
   header: {
     alignItems: "center",
     flexDirection: "row",
     justifyContent: "space-between",
     marginBottom: 16,
+  },
+  rejectionCard: {
+    backgroundColor: colors.red50,
+    borderColor: colors.red600,
+    borderRadius: 8,
+    borderWidth: 1,
+    marginBottom: 16,
+    padding: 12,
+  },
+  rejectionTitle: {
+    color: colors.red700,
+    fontSize: 13,
+    fontWeight: "700",
+    marginBottom: 4,
+  },
+  rejectionBody: {
+    color: colors.red600,
+    fontSize: 14,
+    lineHeight: 18,
   },
   type: {
     color: colors.neutral900,
