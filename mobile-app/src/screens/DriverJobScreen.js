@@ -14,8 +14,8 @@ import {
   Platform,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import MapView, { Marker, UrlTile } from "react-native-maps";
 import { Ionicons } from "@expo/vector-icons";
+import LeafletMap from "../components/LeafletMap";
 import { useDriverTracking } from "../hooks/useDriverTracking";
 import { getPickupTracking } from "../api/pickups";
 import { updateDriverPickupStatus } from "../api/driver";
@@ -26,9 +26,6 @@ const ARRIVAL_RADIUS_METERS = parseInt(
   10
 );
 
-const DEFAULT_TILE_URL = process.env.EXPO_PUBLIC_TILE_URL || "https://tile.openstreetmap.org/{z}/{x}/{y}.png";
-const FALLBACK_TILE_URL = "https://a.tile.openstreetmap.fr/osmfr/{z}/{x}/{y}.png";
-
 export default function DriverJobScreen({ route, navigation }) {
   const { pickupId } = route.params || {};
   const [jobData, setJobData] = useState(null);
@@ -36,11 +33,6 @@ export default function DriverJobScreen({ route, navigation }) {
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [apiError, setApiError] = useState(null);
-
-  // UrlTile states (tileSize=256, maximumZ=18, fallback tile URL, loading & error state)
-  const [tileUrl, setTileUrl] = useState(DEFAULT_TILE_URL);
-  const [tileLoading, setTileLoading] = useState(true);
-  const [tileError, setTileError] = useState(false);
 
   // Render counting (Gated strictly behind __DEV__)
   const renderCountRef = useRef(0);
@@ -245,62 +237,13 @@ export default function DriverJobScreen({ route, navigation }) {
         {/* Mini Destination Map or Missing Coords Warning */}
         {hasValidPickupCoords ? (
           <View style={styles.mapContainer}>
-            <MapView
+            <LeafletMap
               ref={mapRef}
+              pickup={pickupCoords}
+              vehicle={currentCoords}
               style={styles.map}
-              initialRegion={{
-                latitude: pickupCoords.lat,
-                longitude: pickupCoords.lng,
-                latitudeDelta: 0.015,
-                longitudeDelta: 0.015,
-              }}
-              mapType="none"
-              onMapReady={() => setTileLoading(false)}
-              onError={(e) => {
-                console.warn("[DriverJobScreen] MapView/Tile error:", e?.nativeEvent || e);
-                if (tileUrl !== FALLBACK_TILE_URL) {
-                  setTileUrl(FALLBACK_TILE_URL);
-                  setTileError(true);
-                }
-              }}
-              showsUserLocation={true}
-              showsCompass={false}
-            >
-              <UrlTile
-                urlTemplate={tileUrl}
-                tileSize={256}
-                maximumZ={18}
-                flipY={false}
-                zIndex={-1}
-              />
-              <Marker
-                coordinate={{ latitude: pickupCoords.lat, longitude: pickupCoords.lng }}
-                title="Customer Pickup Spot"
-                description={jobData?.address}
-                tracksViewChanges={false}
-              >
-                <View style={styles.pinWrapper}>
-                  <View style={styles.pinCircle}>
-                    <View style={styles.pinDot} />
-                  </View>
-                  <View style={styles.pinTip} />
-                </View>
-              </Marker>
-            </MapView>
-            {tileLoading && (
-              <View style={styles.tileLoadingOverlay} pointerEvents="none">
-                <ActivityIndicator size="small" color={colors.brand700} />
-              </View>
-            )}
-            {tileError && (
-              <View style={styles.tileErrorBanner} pointerEvents="none">
-                <Text style={styles.tileErrorText}>Using backup map tiles</Text>
-              </View>
-            )}
-            <View style={styles.attributionPill} pointerEvents="none">
-              <Text style={styles.attributionPillText}>© OpenStreetMap</Text>
-            </View>
-            <View style={styles.mapOverlayPill}>
+            />
+            <View style={styles.mapOverlayPill} pointerEvents="none">
               <Text style={styles.mapOverlayText}>
                 {distanceToPickup !== null ? `Distance: ~${distanceToPickup}m away` : "Calculating GPS distance..."}
               </Text>

@@ -5,45 +5,20 @@ import {
   Text,
   TouchableOpacity,
   ActivityIndicator,
-  Platform,
   Alert,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import MapView, { Marker, Polyline, UrlTile } from "react-native-maps";
 import { Ionicons } from "@expo/vector-icons";
 import { useLiveTracking } from "../hooks/useLiveTracking";
-import VehicleMarker from "../components/VehicleMarker";
+import LeafletMap from "../components/LeafletMap";
 import TrackingBottomSheet from "../components/TrackingBottomSheet";
 import { colors } from "../theme/colors";
 import { apiFetch } from "../lib/apiClient";
-
-const DEFAULT_TILE_URL = process.env.EXPO_PUBLIC_TILE_URL || "https://tile.openstreetmap.org/{z}/{x}/{y}.png";
-const FALLBACK_TILE_URL = "https://a.tile.openstreetmap.fr/osmfr/{z}/{x}/{y}.png";
-
-// Downsamples route geometry polyline to max 300 points to prevent native Android map hanging
-function simplifyRouteCoordinates(coords, maxPoints = 300) {
-  if (!coords || coords.length <= maxPoints) return coords || [];
-  const step = Math.ceil(coords.length / maxPoints);
-  const simplified = [];
-  for (let i = 0; i < coords.length; i += step) {
-    simplified.push(coords[i]);
-  }
-  const last = coords[coords.length - 1];
-  if (simplified[simplified.length - 1] !== last) {
-    simplified.push(last);
-  }
-  return simplified;
-}
 
 export default function TrackPickupScreen({ route, navigation }) {
   const { pickupId } = route.params || {};
   const mapRef = useRef(null);
   const [mapReady, setMapReady] = useState(false);
-
-  // UrlTile states (tileSize=256, maximumZ=18, fallback URL, loading & error states)
-  const [tileUrl, setTileUrl] = useState(DEFAULT_TILE_URL);
-  const [tileLoading, setTileLoading] = useState(true);
-  const [tileError, setTileError] = useState(false);
 
   // Render counting (Gated strictly behind __DEV__)
   const renderCountRef = useRef(0);
@@ -71,113 +46,20 @@ export default function TrackPickupScreen({ route, navigation }) {
     refetch,
   } = useLiveTracking(pickupId);
 
-  // Ref tracking initial fit to guarantee fitToCoordinates is called ONCE on load, never on recurring updates
-  const hasFittedInitialRef = useRef(false);
-
   // Pickup destination coordinates (null if not pinned)
   const pickupCoords = trackingData?.pickupCoordinates || null;
 
   // Fit map camera to show both vehicle and destination
-  const recenterMap = useCallback(() => {
-    if (!mapRef.current) return;
+  const handleRecenter = useCallback(() => {
+    mapRef.current?.recenter();
+  }, []);
 
-    const coordinates = [];
-    if (vehicleLocation?.lat && vehicleLocation?.lng) {
-      coordinates.push({
-        latitude: vehicleLocation.lat,
-        longitude: vehicleLocation.lng,
-      });
-    }
-    if (pickupCoords?.lat && pickupCoords?.lng) {
-      coordinates.push({
-        latitude: pickupCoords.lat,
-        longitude: pickupCoords.lng,
-      });
-    }
-
-    if (coordinates.length === 1) {
-      mapRef.current.animateToRegion(
-        {
-          latitude: coordinates[0].latitude,
-          longitude: coordinates[0].longitude,
-          latitudeDelta: 0.02,
-          longitudeDelta: 0.02,
-        },
-        800
-      );
-    } else if (coordinates.length > 1) {
-      mapRef.current.fitToCoordinates(coordinates, {
-        edgePadding: { top: 120, right: 60, bottom: 280, left: 60 },
-        animated: true,
-      });
-    }
-  }, [vehicleLocation?.lat, vehicleLocation?.lng, pickupCoords?.lat, pickupCoords?.lng]);
-
-  // Initial fit once tracking data arrives (once on load only)
-  useEffect(() => {
-    if (!hasFittedInitialRef.current && (vehicleLocation?.lat || pickupCoords?.lat)) {
-      hasFittedInitialRef.current = true;
-      recenterMap();
-    }
-  }, [vehicleLocation?.lat, pickupCoords?.lat, recenterMap]);
-
-  // Decode and downsample OSRM route geometry to under 300 points
+  // Format OSRM route geometry coordinates for LeafletMap
   const polylineCoords = useMemo(() => {
     const raw = routeNav?.geometry?.coordinates;
     if (!raw || !Array.isArray(raw) || raw.length === 0) return [];
-    const formatted = raw.map((coord) => ({
-      latitude: coord[1],
-      longitude: coord[0],
-    }));
-    return simplifyRouteCoordinates(formatted, 300);
+    return raw.map((coord) => [coord[1], coord[0]]); // [lat, lng]
   }, [routeNav?.geometry?.coordinates]);
-
-  // Memoized polyline component
-  const memoizedPolyline = useMemo(() => {
-    if (polylineCoords.length === 0) return null;
-    return (
-      <Polyline
-        coordinates={polylineCoords}
-        strokeColor={colors.brand600}
-        strokeWidth={4}
-        lineDashPattern={status === "assigned" ? [6, 4] : null}
-      />
-    );
-  }, [polylineCoords, status]);
-
-  // Memoized destination marker
-  const memoizedDestinationMarker = useMemo(() => {
-    if (!pickupCoords?.lat || !pickupCoords?.lng) return null;
-    return (
-      <Marker
-        coordinate={{
-          latitude: pickupCoords.lat,
-          longitude: pickupCoords.lng,
-        }}
-        title="Pickup Location"
-        description={trackingData?.address}
-        tracksViewChanges={false}
-      >
-        <View style={styles.pickupPinContainer}>
-          <View style={styles.pickupPinCircle}>
-            <View style={styles.pickupPinInnerDot} />
-          </View>
-          <View style={styles.pickupPinTriangle} />
-        </View>
-      </Marker>
-    );
-  }, [pickupCoords?.lat, pickupCoords?.lng, trackingData?.address]);
-
-  // Memoized vehicle marker
-  const memoizedVehicleMarker = useMemo(() => {
-    if (!vehicleLocation?.lat || !vehicleLocation?.lng) return null;
-    return (
-      <VehicleMarker
-        location={vehicleLocation}
-        registrationNo={trackingData?.vehicle?.registrationNo}
-      />
-    );
-  }, [vehicleLocation, trackingData?.vehicle?.registrationNo]);
 
   // Handle Cancel Pickup
   const handleCancelPickup = useCallback(() => {
@@ -232,13 +114,6 @@ export default function TrackPickupScreen({ route, navigation }) {
     );
   }
 
-  const initialRegion = {
-    latitude: vehicleLocation?.lat || pickupCoords?.lat || 16.8413,
-    longitude: vehicleLocation?.lng || pickupCoords?.lng || 74.6016,
-    latitudeDelta: 0.03,
-    longitudeDelta: 0.03,
-  };
-
   const statusIcons = {
     requested: "time-outline",
     assigned: "cube-outline",
@@ -257,64 +132,15 @@ export default function TrackPickupScreen({ route, navigation }) {
 
   return (
     <View style={styles.container}>
-      {/* 1. Full Screen Interactive Map with OpenStreetMap Tiles */}
-      <MapView
+      {/* 1. Full Screen Interactive Leaflet Map via WebView */}
+      <LeafletMap
         ref={mapRef}
         style={styles.map}
-        initialRegion={initialRegion}
-        mapType="none"
-        onMapReady={() => {
-          setMapReady(true);
-          setTileLoading(false);
-        }}
-        onError={(e) => {
-          console.warn("[TrackPickup] MapView/Tile error:", e?.nativeEvent || e);
-          if (tileUrl !== FALLBACK_TILE_URL) {
-            setTileUrl(FALLBACK_TILE_URL);
-            setTileError(true);
-          }
-        }}
-        showsUserLocation={false}
-        showsCompass={false}
-        showsTraffic={false}
-      >
-        {/* OpenStreetMap Raster Tile Layer (Zero Google API key required) */}
-        <UrlTile
-          urlTemplate={tileUrl}
-          tileSize={256}
-          maximumZ={18}
-          flipY={false}
-          zIndex={-1}
-        />
-
-        {/* Route Polyline in Brand Green (Memoized, simplified to <300 points) */}
-        {memoizedPolyline}
-
-        {/* Pickup Destination Pin - Memoized Pure View Marker */}
-        {memoizedDestinationMarker}
-
-        {/* Animated Moving Vehicle Marker - Memoized Pure View Marker */}
-        {memoizedVehicleMarker}
-      </MapView>
-
-      {/* Map Tile Loading Indicator */}
-      {tileLoading && (
-        <View style={styles.tileLoadingOverlay} pointerEvents="none">
-          <ActivityIndicator size="small" color={colors.brand700} />
-        </View>
-      )}
-
-      {/* Map Tile Fallback Notice Banner */}
-      {tileError && (
-        <View style={styles.tileErrorBanner} pointerEvents="none">
-          <Text style={styles.tileErrorText}>Using backup map tiles</Text>
-        </View>
-      )}
-
-      {/* Map Attribution Text */}
-      <View style={styles.attributionContainer} pointerEvents="none">
-        <Text style={styles.attributionText}>© OpenStreetMap contributors</Text>
-      </View>
+        pickup={pickupCoords}
+        vehicle={vehicleLocation}
+        route={polylineCoords}
+        onReady={() => setMapReady(true)}
+      />
 
       {/* 2. Floating Header: Back & Recenter */}
       <SafeAreaView style={styles.floatingHeader} edges={["top", "left", "right"]}>
@@ -335,7 +161,7 @@ export default function TrackPickupScreen({ route, navigation }) {
           </Text>
         </View>
 
-        <TouchableOpacity style={styles.circleButton} onPress={recenterMap}>
+        <TouchableOpacity style={styles.circleButton} onPress={handleRecenter}>
           <Ionicons name="locate" size={20} color={colors.brand700} />
         </TouchableOpacity>
       </SafeAreaView>
@@ -360,14 +186,14 @@ export default function TrackPickupScreen({ route, navigation }) {
         </View>
       )}
 
-      {/* 4. Draggable Bottom Sheet */}
+      {/* 4. Interactive Bottom Sheet with Trip Timeline & Details */}
       <TrackingBottomSheet
         trackingData={trackingData}
         status={status}
         navigation={routeNav}
         connectionState={connectionState}
         isStale={isStale}
-        onCancelPickup={["requested", "assigned"].includes(status) ? handleCancelPickup : null}
+        onCancelPickup={status === "requested" || status === "assigned" ? handleCancelPickup : null}
       />
     </View>
   );
@@ -376,65 +202,10 @@ export default function TrackPickupScreen({ route, navigation }) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: colors.background,
+    backgroundColor: "#F8FAFC",
   },
   map: {
     ...StyleSheet.absoluteFillObject,
-    flex: 1,
-    width: "100%",
-    height: "100%",
-  },
-  loadingContainer: {
-    flex: 1,
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: colors.background,
-    padding: 24,
-  },
-  loadingText: {
-    marginTop: 12,
-    fontSize: 15,
-    color: colors.neutral600,
-    fontWeight: "500",
-  },
-  errorContainer: {
-    flex: 1,
-    alignItems: "center",
-    justifyContent: "center",
-    padding: 24,
-    backgroundColor: colors.background,
-  },
-  errorTitle: {
-    fontSize: 18,
-    fontWeight: "800",
-    color: colors.neutral900,
-    marginBottom: 6,
-  },
-  errorSub: {
-    fontSize: 14,
-    color: colors.neutral600,
-    textAlign: "center",
-    marginBottom: 20,
-  },
-  retryButton: {
-    backgroundColor: colors.brand600,
-    paddingHorizontal: 24,
-    paddingVertical: 12,
-    borderRadius: 12,
-  },
-  retryText: {
-    color: colors.white,
-    fontWeight: "700",
-    fontSize: 15,
-  },
-  backLink: {
-    marginTop: 14,
-    padding: 8,
-  },
-  backLinkText: {
-    color: colors.neutral600,
-    fontSize: 14,
-    fontWeight: "600",
   },
   floatingHeader: {
     position: "absolute",
@@ -442,8 +213,8 @@ const styles = StyleSheet.create({
     left: 16,
     right: 16,
     flexDirection: "row",
-    justifyContent: "space-between",
     alignItems: "center",
+    justifyContent: "space-between",
     zIndex: 10,
   },
   circleButton: {
@@ -454,7 +225,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
+    shadowOffset: { width: 0, height: 3 },
     shadowOpacity: 0.15,
     shadowRadius: 6,
     elevation: 4,
@@ -462,73 +233,72 @@ const styles = StyleSheet.create({
   statusBanner: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: colors.neutral900,
-    paddingHorizontal: 16,
+    backgroundColor: "rgba(15, 23, 42, 0.88)",
     paddingVertical: 8,
+    paddingHorizontal: 14,
     borderRadius: 20,
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.2,
+    shadowOpacity: 0.1,
     shadowRadius: 4,
-    elevation: 4,
+    elevation: 3,
   },
   statusBannerText: {
     color: colors.white,
     fontSize: 13,
     fontWeight: "700",
-    letterSpacing: 0.3,
   },
-  pickupPinContainer: {
+  loadingContainer: {
+    flex: 1,
+    backgroundColor: "#F8FAFC",
     alignItems: "center",
     justifyContent: "center",
-    width: 32,
-    height: 38,
   },
-  pickupPinCircle: {
-    width: 26,
-    height: 26,
-    borderRadius: 13,
-    backgroundColor: colors.red600,
-    alignItems: "center",
-    justifyContent: "center",
-    borderWidth: 2,
-    borderColor: colors.white,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.3,
-    shadowRadius: 3,
-    elevation: 4,
-  },
-  pickupPinInnerDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: colors.white,
-  },
-  pickupPinTriangle: {
-    width: 0,
-    height: 0,
-    borderLeftWidth: 5,
-    borderRightWidth: 5,
-    borderTopWidth: 8,
-    borderLeftColor: "transparent",
-    borderRightColor: "transparent",
-    borderTopColor: colors.red600,
-    marginTop: -2,
-  },
-  attributionContainer: {
-    position: "absolute",
-    bottom: 240,
-    right: 8,
-    backgroundColor: "rgba(255, 255, 255, 0.75)",
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 4,
-    zIndex: 5,
-  },
-  attributionText: {
-    fontSize: 9,
+  loadingText: {
+    marginTop: 12,
+    fontSize: 14,
     color: colors.neutral600,
+    fontWeight: "600",
+  },
+  errorContainer: {
+    flex: 1,
+    backgroundColor: "#F8FAFC",
+    alignItems: "center",
+    justifyContent: "center",
+    padding: 24,
+  },
+  errorTitle: {
+    fontSize: 18,
+    fontWeight: "700",
+    color: colors.neutral900,
+    marginBottom: 6,
+  },
+  errorSub: {
+    fontSize: 13,
+    color: colors.neutral500,
+    textAlign: "center",
+    marginBottom: 20,
+    lineHeight: 18,
+  },
+  retryButton: {
+    backgroundColor: colors.brand600,
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+    borderRadius: 12,
+    marginBottom: 12,
+  },
+  retryText: {
+    color: colors.white,
+    fontWeight: "700",
+    fontSize: 14,
+  },
+  backLink: {
+    padding: 8,
+  },
+  backLinkText: {
+    color: colors.neutral600,
+    fontSize: 14,
+    fontWeight: "600",
   },
   celebrationCard: {
     position: "absolute",
@@ -575,29 +345,5 @@ const styles = StyleSheet.create({
     color: colors.white,
     fontWeight: "700",
     fontSize: 14,
-  },
-  tileLoadingOverlay: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: "rgba(240, 244, 248, 0.6)",
-    justifyContent: "center",
-    alignItems: "center",
-    zIndex: 1,
-  },
-  tileErrorBanner: {
-    position: "absolute",
-    top: 70,
-    alignSelf: "center",
-    backgroundColor: colors.amber100,
-    borderColor: colors.amber600,
-    borderWidth: 0.5,
-    borderRadius: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 4,
-    zIndex: 10,
-  },
-  tileErrorText: {
-    fontSize: 11,
-    color: colors.amber800,
-    fontWeight: "600",
   },
 });
