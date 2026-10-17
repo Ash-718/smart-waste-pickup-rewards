@@ -3,6 +3,7 @@ import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator, Platform }
 import { StatusBar } from "expo-status-bar";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { SafeAreaProvider, SafeAreaView } from "react-native-safe-area-context";
+import { GestureHandlerRootView } from "react-native-gesture-handler";
 import * as SplashScreen from "expo-splash-screen";
 import * as Font from "expo-font";
 import { Ionicons } from "@expo/vector-icons";
@@ -87,25 +88,27 @@ export default function App() {
   }
 
   return (
-    <SafeAreaProvider>
-      <ErrorBoundary>
-        <QueryClientProvider client={queryClient}>
-          <AuthProvider>
-            <RootNavigator />
-            <StatusBar style="dark" />
+    <GestureHandlerRootView style={{ flex: 1 }}>
+      <SafeAreaProvider>
+        <ErrorBoundary>
+          <QueryClientProvider client={queryClient}>
+            <AuthProvider>
+              <RootNavigator />
+              <StatusBar style="dark" />
 
-            {/* Dev-Only Debug Banner: renders strictly when __DEV__ is true */}
-            {__DEV__ && (
-              <View style={styles.devDebugBar} pointerEvents="none">
-                <Text style={styles.devDebugText} numberOfLines={1}>
-                  [DEV] API: {API_BASE_URL} | Socket: {SOCKET_BASE_URL}
-                </Text>
-              </View>
-            )}
-          </AuthProvider>
-        </QueryClientProvider>
-      </ErrorBoundary>
-    </SafeAreaProvider>
+              {/* Dev-Only Debug Banner: positioned at top so it never covers bottom sheet */}
+              {__DEV__ && (
+                <View style={styles.devDebugBar} pointerEvents="none">
+                  <Text style={styles.devDebugText} numberOfLines={1}>
+                    [DEV] API: {API_BASE_URL} | Socket: {SOCKET_BASE_URL}
+                  </Text>
+                </View>
+              )}
+            </AuthProvider>
+          </QueryClientProvider>
+        </ErrorBoundary>
+      </SafeAreaProvider>
+    </GestureHandlerRootView>
   );
 }
 
@@ -172,15 +175,16 @@ const styles = StyleSheet.create({
   },
   devDebugBar: {
     position: "absolute",
-    bottom: 0,
-    left: 0,
-    right: 0,
-    backgroundColor: "rgba(15, 23, 42, 0.88)",
-    paddingVertical: 3,
+    top: Platform.OS === "android" ? 4 : 44,
+    alignSelf: "center",
+    backgroundColor: "rgba(15, 23, 42, 0.85)",
+    paddingVertical: 2,
     paddingHorizontal: 8,
+    borderRadius: 4,
     alignItems: "center",
     justifyContent: "center",
     zIndex: 9999,
+    maxWidth: "94%",
   },
   devDebugText: {
     color: "#94A3B8",

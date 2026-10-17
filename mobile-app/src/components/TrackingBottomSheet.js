@@ -1,14 +1,17 @@
-import React, { useState, useRef } from "react";
-import { StyleSheet, View, Text, TouchableOpacity, Linking, Animated, PanResponder, ScrollView, Platform } from "react-native";
+import React, { useRef, useMemo, useCallback, useState } from "react";
+import {
+  StyleSheet,
+  View,
+  Text,
+  TouchableOpacity,
+  Linking,
+  Platform,
+} from "react-native";
+import BottomSheet, { BottomSheetScrollView } from "@gorhom/bottom-sheet";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { colors } from "../theme/colors";
 import StatusStepper from "./StatusStepper";
-
-const SNAP_POINTS = {
-  collapsed: 160,
-  half: 380,
-  full: 580,
-};
 
 function TrackingBottomSheet({
   trackingData,
@@ -18,36 +21,26 @@ function TrackingBottomSheet({
   isStale,
   onCancelPickup,
 }) {
-  const [currentSnap, setCurrentSnap] = useState("collapsed");
-  const animatedHeight = useRef(new Animated.Value(SNAP_POINTS.collapsed)).current;
+  const sheetRef = useRef(null);
+  const insets = useSafeAreaInsets();
+  const [sheetIndex, setSheetIndex] = useState(1); // 0: collapsed, 1: half, 2: full
 
-  const snapTo = (snapName) => {
-    setCurrentSnap(snapName);
-    Animated.spring(animatedHeight, {
-      toValue: SNAP_POINTS[snapName],
-      useNativeDriver: false,
-      friction: 8,
-      tension: 40,
-    }).start();
-  };
+  // Three snap points: Collapsed (~160px), Half (~420px), Full (~88% of screen)
+  const snapPoints = useMemo(() => ["22%", "52%", "88%"], []);
 
-  // Drag Gesture Handler
-  const panResponder = useRef(
-    PanResponder.create({
-      onMoveShouldSetPanResponder: (_, gestureState) => Math.abs(gestureState.dy) > 10,
-      onPanResponderRelease: (_, gestureState) => {
-        if (gestureState.dy < -50) {
-          // Dragged up
-          if (currentSnap === "collapsed") snapTo("half");
-          else if (currentSnap === "half") snapTo("full");
-        } else if (gestureState.dy > 50) {
-          // Dragged down
-          if (currentSnap === "full") snapTo("half");
-          else if (currentSnap === "half") snapTo("collapsed");
-        }
-      },
-    })
-  ).current;
+  const handleSheetChange = useCallback((index) => {
+    setSheetIndex(index);
+  }, []);
+
+  const toggleSheetSnap = useCallback(() => {
+    if (sheetIndex <= 0) {
+      sheetRef.current?.snapToIndex(1);
+    } else if (sheetIndex === 1) {
+      sheetRef.current?.snapToIndex(2);
+    } else {
+      sheetRef.current?.snapToIndex(0);
+    }
+  }, [sheetIndex]);
 
   const driver = trackingData?.driver;
   const vehicle = trackingData?.vehicle;
@@ -62,19 +55,26 @@ function TrackingBottomSheet({
   };
 
   return (
-    <Animated.View style={[styles.sheetContainer, { height: animatedHeight }]}>
-      {/* Drag Bar & Handle */}
-      <View {...panResponder.panHandlers} style={styles.handleContainer}>
-        <View style={styles.handleBar} />
-      </View>
-
-      <ScrollView
+    <BottomSheet
+      ref={sheetRef}
+      index={1} // Default open to half snap
+      snapPoints={snapPoints}
+      onChange={handleSheetChange}
+      enablePanDownToClose={false}
+      enableOverDrag={false}
+      backgroundStyle={styles.sheetBackground}
+      handleIndicatorStyle={styles.handleIndicator}
+    >
+      <BottomSheetScrollView
         showsVerticalScrollIndicator={false}
-        contentContainerStyle={styles.scrollContent}
-        scrollEnabled={currentSnap === "full"}
+        nestedScrollEnabled={true}
+        contentContainerStyle={[
+          styles.scrollContent,
+          { paddingBottom: Math.max(insets.bottom + 40, 60) },
+        ]}
       >
         {/* ========================================================
-            SECTION 1: COLLAPSED HEADER (Always visible)
+            SECTION 1: STATUS & ETA HEADER
         ======================================================== */}
         <View style={styles.headerRow}>
           <View style={styles.etaCol}>
@@ -102,9 +102,7 @@ function TrackingBottomSheet({
               </View>
             ) : (
               <View>
-                <Text style={styles.etaBig}>
-                  Arriving in ~{etaMinutes} min
-                </Text>
+                <Text style={styles.etaBig}>Arriving in ~{etaMinutes} min</Text>
                 <Text style={styles.subtext}>
                   {distanceKm} km away • {vehicle?.type || "Eco Collection Vehicle"}
                 </Text>
@@ -112,7 +110,7 @@ function TrackingBottomSheet({
             )}
           </View>
 
-          {/* Connection Chip */}
+          {/* Connection Chip & Telemetry Health */}
           <View style={styles.chipsCol}>
             <View
               style={[
@@ -128,53 +126,66 @@ function TrackingBottomSheet({
                 ]}
               />
               <Text style={styles.connText}>
-                {connectionState === "connected" ? "Live" : "Reconnecting..."}
+                {connectionState === "connected"
+                  ? "Live"
+                  : connectionState === "reconnecting"
+                  ? "Reconnecting"
+                  : "Offline"}
               </Text>
             </View>
 
-            {isStale && status !== "completed" && status !== "arrived" ? (
+            {isStale && status === "on_the_way" && (
               <View style={styles.staleChip}>
                 <Text style={styles.staleText}>GPS Signal Weak</Text>
               </View>
-            ) : null}
+            )}
           </View>
         </View>
 
-        {/* Snap point quick toggle buttons */}
+        {/* Snap Toggle Helper Pill */}
         <View style={styles.toggleRow}>
           <TouchableOpacity
-            onPress={() => snapTo(currentSnap === "collapsed" ? "half" : "collapsed")}
             style={styles.toggleButton}
+            onPress={toggleSheetSnap}
+            activeOpacity={0.7}
           >
             <Ionicons
-              name={currentSnap === "collapsed" ? "chevron-up" : "chevron-down"}
+              name={sheetIndex === 2 ? "chevron-down" : "chevron-up"}
               size={14}
               color={colors.brand700}
               style={{ marginRight: 4 }}
             />
             <Text style={styles.toggleText}>
-              {currentSnap === "collapsed" ? "View Driver & Details" : "Collapse Sheet"}
+              {sheetIndex === 2
+                ? "Collapse Sheet"
+                : sheetIndex === 1
+                ? "Expand Details"
+                : "View Trip Progress"}
             </Text>
           </TouchableOpacity>
         </View>
 
         {/* ========================================================
-            SECTION 2: HALF VIEW - DRIVER CARD & STATUS STEPPER
+            SECTION 2: DRIVER CARD
         ======================================================== */}
-        {isAssigned && (
+        {driver && (
           <View style={styles.driverCard}>
             <View style={styles.driverAvatar}>
-              <Ionicons name="person" size={22} color={colors.brand700} />
+              <Ionicons name="person" size={20} color={colors.brand700} />
             </View>
             <View style={styles.driverInfo}>
-              <Text style={styles.driverName}>{driver?.name || "Assigned Driver"}</Text>
+              <Text style={styles.driverName}>{driver.name || "Assigned Driver"}</Text>
               <Text style={styles.driverVehicle}>
-                {vehicle?.registrationNo} • {vehicle?.type}
+                {vehicle?.registrationNo || "Vehicle"} • {vehicle?.type || "Waste Collector"}
               </Text>
             </View>
-            {driver?.phone && ["assigned", "on_the_way", "arrived"].includes(status) ? (
-              <TouchableOpacity onPress={handleCallDriver} style={styles.callButton}>
-                <Ionicons name="call" size={13} color={colors.white} style={{ marginRight: 4 }} />
+            {driver?.phone ? (
+              <TouchableOpacity
+                style={styles.callButton}
+                onPress={handleCallDriver}
+                activeOpacity={0.8}
+              >
+                <Ionicons name="call" size={14} color={colors.white} style={{ marginRight: 5 }} />
                 <Text style={styles.callButtonText}>Call</Text>
               </TouchableOpacity>
             ) : null}
@@ -183,110 +194,114 @@ function TrackingBottomSheet({
 
         <View style={styles.sectionDivider} />
 
-        {/* Status Stepper */}
+        {/* ========================================================
+            SECTION 3: TRIP PROGRESS STEPPER
+        ======================================================== */}
         <Text style={styles.sectionHeader}>Trip Progress</Text>
         <StatusStepper
           status={status}
-          timestamps={{
-            assignedAt: trackingData?.assignedAt,
-            startedAt: trackingData?.startedAt,
-            arrivedAt: trackingData?.arrivedAt,
-            completedAt: trackingData?.completedAt,
-          }}
+          timestamps={trackingData?.timestamps || {}}
         />
 
-        {/* ========================================================
-            SECTION 3: FULL VIEW - PICKUP DETAILS & CANCEL BUTTON
-        ======================================================== */}
         <View style={styles.sectionDivider} />
-        <Text style={styles.sectionHeader}>Pickup Summary</Text>
 
+        {/* ========================================================
+            SECTION 4: PICKUP DETAILS CARD
+        ======================================================== */}
+        <Text style={styles.sectionHeader}>Pickup Details</Text>
         <View style={styles.detailsCard}>
           <View style={styles.detailRow}>
-            <Text style={styles.detailLabel}>Waste Category:</Text>
-            <Text style={styles.detailValue}>{trackingData?.wasteType || "Mixed Recyclables"}</Text>
+            <Text style={styles.detailLabel}>Address</Text>
+            <Text style={styles.detailValueAddress} numberOfLines={2}>
+              {trackingData?.address || "Location specified"}
+            </Text>
           </View>
           <View style={styles.detailRow}>
-            <Text style={styles.detailLabel}>Quantity Band:</Text>
+            <Text style={styles.detailLabel}>Waste Type</Text>
+            <Text style={styles.detailValue}>{trackingData?.wasteType || "Recyclables"}</Text>
+          </View>
+          <View style={styles.detailRow}>
+            <Text style={styles.detailLabel}>Quantity</Text>
             <Text style={styles.detailValue}>{trackingData?.quantityBand || "Medium"}</Text>
           </View>
-          <View style={styles.detailRow}>
-            <Text style={styles.detailLabel}>Pickup Address:</Text>
-            <Text style={styles.detailValueAddress}>{trackingData?.address || "Address"}</Text>
-          </View>
+          {trackingData?.wasteQuantity ? (
+            <View style={styles.detailRow}>
+              <Text style={styles.detailLabel}>Scale Measured Weight</Text>
+              <Text style={[styles.detailValue, { color: colors.brand700, fontWeight: "700" }]}>
+                {trackingData.wasteQuantity} kg
+              </Text>
+            </View>
+          ) : null}
         </View>
 
-        {/* Cancel button if pickup is still cancellable (requested or assigned) */}
-        {["requested", "assigned"].includes(status) && onCancelPickup ? (
-          <TouchableOpacity onPress={onCancelPickup} style={styles.cancelButton}>
+        {/* ========================================================
+            SECTION 5: CANCEL PICKUP ACTION
+        ======================================================== */}
+        {onCancelPickup && (
+          <TouchableOpacity
+            style={styles.cancelButton}
+            onPress={onCancelPickup}
+            activeOpacity={0.8}
+          >
             <Text style={styles.cancelText}>Cancel Pickup Request</Text>
           </TouchableOpacity>
-        ) : null}
-      </ScrollView>
-    </Animated.View>
+        )}
+      </BottomSheetScrollView>
+    </BottomSheet>
   );
 }
 
 const styles = StyleSheet.create({
-  sheetContainer: {
-    position: "absolute",
-    bottom: 0,
-    left: 0,
-    right: 0,
+  sheetBackground: {
     backgroundColor: colors.white,
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
     shadowColor: "#000",
-    shadowOffset: { width: 0, height: -6 },
-    shadowOpacity: 0.15,
-    shadowRadius: 12,
-    elevation: 20,
-    zIndex: 100,
+    shadowOffset: { width: 0, height: -4 },
+    shadowOpacity: 0.1,
+    shadowRadius: 10,
+    elevation: 12,
   },
-  handleContainer: {
-    paddingVertical: 12,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  handleBar: {
-    width: 44,
-    height: 5,
-    borderRadius: 2.5,
+  handleIndicator: {
     backgroundColor: colors.neutral300,
+    width: 44,
+    height: 4,
+    borderRadius: 2,
   },
   scrollContent: {
     paddingHorizontal: 20,
-    paddingBottom: 32,
+    paddingTop: 8,
   },
   headerRow: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "flex-start",
+    marginBottom: 6,
   },
   etaCol: {
     flex: 1,
-    paddingRight: 10,
+    paddingRight: 12,
   },
   etaBig: {
-    fontSize: 22,
+    fontSize: 20,
     fontWeight: "800",
     color: colors.neutral900,
-    letterSpacing: -0.5,
+    letterSpacing: -0.3,
+  },
+  arrivedTitle: {
+    fontSize: 20,
+    fontWeight: "800",
+    color: colors.brand700,
   },
   completedTitle: {
-    fontSize: 22,
+    fontSize: 20,
     fontWeight: "800",
     color: colors.brand700,
   },
   completedSub: {
     fontSize: 13,
-    color: colors.brand600,
+    color: colors.neutral500,
     marginTop: 2,
-  },
-  arrivedTitle: {
-    fontSize: 22,
-    fontWeight: "800",
-    color: colors.blue600,
   },
   subtext: {
     fontSize: 13,
@@ -339,7 +354,7 @@ const styles = StyleSheet.create({
   },
   toggleRow: {
     alignItems: "center",
-    marginVertical: 10,
+    marginVertical: 8,
   },
   toggleButton: {
     paddingVertical: 5,
@@ -358,23 +373,20 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     backgroundColor: colors.neutral50,
-    padding: 14,
+    padding: 12,
     borderRadius: 16,
     borderWidth: 1,
     borderColor: colors.neutral200,
-    marginTop: 6,
+    marginTop: 4,
   },
   driverAvatar: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
+    width: 42,
+    height: 42,
+    borderRadius: 21,
     backgroundColor: colors.brand100,
     alignItems: "center",
     justifyContent: "center",
     marginRight: 12,
-  },
-  avatarEmoji: {
-    fontSize: 22,
   },
   driverInfo: {
     flex: 1,
@@ -405,7 +417,7 @@ const styles = StyleSheet.create({
   sectionDivider: {
     height: 1,
     backgroundColor: colors.neutral200,
-    marginVertical: 16,
+    marginVertical: 14,
   },
   sectionHeader: {
     fontSize: 15,
