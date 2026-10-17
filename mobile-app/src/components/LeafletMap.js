@@ -7,6 +7,12 @@ const DEFAULT_TILE_URL =
   process.env.EXPO_PUBLIC_TILE_URL ||
   "https://a.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}.png";
 
+function sanitizeNumber(val, fallback = null) {
+  if (val === null || val === undefined || val === "") return fallback;
+  const num = Number(val);
+  return Number.isFinite(num) ? num : fallback;
+}
+
 // Downsample route coordinates to under 300 points for smooth performance
 function downsampleRoute(points, maxPoints = 280) {
   if (!points || !Array.isArray(points) || points.length <= maxPoints) {
@@ -24,18 +30,24 @@ function downsampleRoute(points, maxPoints = 280) {
   return result;
 }
 
-// Convert route points to [[lat, lng], ...]
+// Convert route points to [[lat, lng], ...] ensuring strictly finite numbers
 function normalizeRoutePoints(points) {
   if (!points || !Array.isArray(points)) return [];
-  return downsampleRoute(points).map((p) => {
-    if (Array.isArray(p)) return [Number(p[0]), Number(p[1])];
-    if (p && typeof p === "object") {
-      const lat = p.latitude !== undefined ? p.latitude : p.lat;
-      const lng = p.longitude !== undefined ? p.longitude : p.lng;
-      return [Number(lat), Number(lng)];
-    }
-    return null;
-  }).filter((p) => p && !isNaN(p[0]) && !isNaN(p[1]));
+  return downsampleRoute(points)
+    .map((p) => {
+      if (Array.isArray(p) && p.length >= 2) {
+        const lat = sanitizeNumber(p[0]);
+        const lng = sanitizeNumber(p[1]);
+        if (lat !== null && lng !== null) return [lat, lng];
+      }
+      if (p && typeof p === "object") {
+        const lat = sanitizeNumber(p.latitude !== undefined ? p.latitude : p.lat);
+        const lng = sanitizeNumber(p.longitude !== undefined ? p.longitude : p.lng);
+        if (lat !== null && lng !== null) return [lat, lng];
+      }
+      return null;
+    })
+    .filter(Boolean);
 }
 
 function generateLeafletHtml(tileUrl) {
@@ -180,10 +192,12 @@ function generateLeafletHtml(tileUrl) {
     }
 
     function updateVehicle(v) {
-      if (!v || v.lat == null || v.lng == null) return;
-      var targetLat = Number(v.lat);
-      var targetLng = Number(v.lng);
-      var targetHeading = Number(v.heading || 0);
+      if (!v || typeof v !== 'object') return;
+      var targetLat = typeof v.lat === 'number' && !isNaN(v.lat) ? v.lat : null;
+      var targetLng = typeof v.lng === 'number' && !isNaN(v.lng) ? v.lng : null;
+      var targetHeading = typeof v.heading === 'number' && !isNaN(v.heading) ? v.heading : 0;
+
+      if (targetLat === null || targetLng === null) return;
 
       if (!vehicleMarker) {
         curVehicle = { lat: targetLat, lng: targetLng, heading: targetHeading };
@@ -211,8 +225,8 @@ function generateLeafletHtml(tileUrl) {
     }
 
     function updatePickup(p) {
-      if (!p || p.lat == null || p.lng == null) {
-        if (pickupMarker) {
+      if (!p || typeof p !== 'object' || p.lat == null || p.lng == null || isNaN(p.lat) || isNaN(p.lng)) {
+        if (pickupMarker && map) {
           map.removeLayer(pickupMarker);
           pickupMarker = null;
         }
@@ -237,8 +251,8 @@ function generateLeafletHtml(tileUrl) {
     }
 
     function updateRoute(coords) {
-      if (!coords || !coords.length) {
-        if (routePolyline) {
+      if (!coords || !Array.isArray(coords) || !coords.length) {
+        if (routePolyline && map) {
           map.removeLayer(routePolyline);
           routePolyline = null;
         }
@@ -263,13 +277,16 @@ function generateLeafletHtml(tileUrl) {
     }
 
     function fitAllBounds() {
+      if (!map) return;
       var bounds = [];
-      if (curVehicle.lat != null && curVehicle.lng != null) {
+      if (curVehicle.lat != null && curVehicle.lng != null && !isNaN(curVehicle.lat) && !isNaN(curVehicle.lng)) {
         bounds.push([curVehicle.lat, curVehicle.lng]);
       }
       if (pickupMarker) {
         var pPos = pickupMarker.getLatLng();
-        bounds.push([pPos.lat, pPos.lng]);
+        if (pPos && !isNaN(pPos.lat) && !isNaN(pPos.lng)) {
+          bounds.push([pPos.lat, pPos.lng]);
+        }
       }
 
       if (bounds.length === 0) return;
@@ -313,8 +330,10 @@ function generateLeafletHtml(tileUrl) {
     }
 
     function handleRNMessage(event) {
+      if (!event || typeof event.data !== 'string') return;
       try {
         var msg = JSON.parse(event.data);
+        if (!msg || typeof msg !== 'object' || typeof msg.type !== 'string') return;
         if (msg.type === 'updateVehicle') {
           updateVehicle(msg.vehicle);
         } else if (msg.type === 'updatePickup') {
@@ -371,12 +390,16 @@ const LeafletMap = forwardRef(function LeafletMap(
 
   const postBridgeMessage = useCallback((data) => {
     if (webViewRef.current) {
-      const json = JSON.stringify(data);
-      // Support both postMessage and injectJavaScript fallback
+      const jsonString = JSON.stringify(data);
+      // Safely inject JSON via JSON.stringify to prevent script injection vulnerabilities
       const script = `(function() {
-        var event = { data: ${JSON.stringify(json)} };
-        if (typeof handleRNMessage === 'function') {
-          handleRNMessage(event);
+        try {
+          var event = { data: ${JSON.stringify(jsonString)} };
+          if (typeof handleRNMessage === 'function') {
+            handleRNMessage(event);
+          }
+        } catch(e) {
+          console.error('[LeafletMap] injected script error:', e);
         }
       })();`;
       webViewRef.current.injectJavaScript(script);
@@ -394,59 +417,86 @@ const LeafletMap = forwardRef(function LeafletMap(
     [postBridgeMessage]
   );
 
-  // Handle messages from WebView
+  // Validate onMessage payloads
   const handleWebViewMessage = useCallback(
     (event) => {
+      if (!event || !event.nativeEvent || typeof event.nativeEvent.data !== "string") {
+        return;
+      }
+      let data;
       try {
-        const data = JSON.parse(event.nativeEvent.data);
-        if (data.type === "ready") {
+        data = JSON.parse(event.nativeEvent.data);
+      } catch (err) {
+        console.warn("[LeafletMap] Failed to parse bridge message JSON:", err);
+        return;
+      }
+      if (!data || typeof data !== "object" || typeof data.type !== "string") {
+        console.warn("[LeafletMap] Invalid message format:", data);
+        return;
+      }
+
+      switch (data.type) {
+        case "ready":
           setIsReady(true);
           setHasError(false);
           if (onReady) onReady();
-        } else if (data.type === "error") {
+          break;
+        case "error":
           setHasError(true);
-          setErrorMessage(data.message || "Failed to load map");
+          setErrorMessage(typeof data.message === "string" ? data.message : "Failed to load map");
           if (onError) onError(data.message);
-        } else if (data.type === "tilefail") {
+          break;
+        case "tilefail":
           setHasError(true);
           setErrorMessage("Map tiles could not be loaded. Please check your internet connection.");
           if (onError) onError("Tile loading failed");
-        } else if (data.type === "recentered") {
+          break;
+        case "recentered":
           if (onRecenter) onRecenter();
-        }
-      } catch (err) {
-        console.warn("[LeafletMap] Error parsing bridge message:", err);
+          break;
+        default:
+          break;
       }
     },
     [onReady, onError, onRecenter]
   );
 
+  // Sanitized vehicle numbers
+  const sanitizedVehicle = useMemo(() => {
+    if (!vehicle) return null;
+    const lat = sanitizeNumber(vehicle.lat !== undefined ? vehicle.lat : vehicle.latitude);
+    const lng = sanitizeNumber(vehicle.lng !== undefined ? vehicle.lng : vehicle.longitude);
+    const heading = sanitizeNumber(vehicle.heading, 0);
+    if (lat === null || lng === null) return null;
+    return { lat, lng, heading };
+  }, [vehicle?.lat, vehicle?.lng, vehicle?.latitude, vehicle?.longitude, vehicle?.heading]);
+
   // Send updates to WebView whenever vehicle changes
   useEffect(() => {
-    if (!isReady || !vehicle) return;
+    if (!isReady || !sanitizedVehicle) return;
     postBridgeMessage({
       type: "updateVehicle",
-      vehicle: {
-        lat: vehicle.lat !== undefined ? vehicle.lat : vehicle.latitude,
-        lng: vehicle.lng !== undefined ? vehicle.lng : vehicle.longitude,
-        heading: vehicle.heading || 0,
-      },
+      vehicle: sanitizedVehicle,
     });
-  }, [isReady, vehicle?.lat, vehicle?.lng, vehicle?.latitude, vehicle?.longitude, vehicle?.heading, postBridgeMessage]);
+  }, [isReady, sanitizedVehicle, postBridgeMessage]);
+
+  // Sanitized pickup numbers (safely handles null/undefined pickup without crashing)
+  const sanitizedPickup = useMemo(() => {
+    if (!pickup) return null;
+    const lat = sanitizeNumber(pickup.lat !== undefined ? pickup.lat : pickup.latitude);
+    const lng = sanitizeNumber(pickup.lng !== undefined ? pickup.lng : pickup.longitude);
+    if (lat === null || lng === null) return null;
+    return { lat, lng };
+  }, [pickup?.lat, pickup?.lng, pickup?.latitude, pickup?.longitude]);
 
   // Send updates to WebView whenever pickup changes
   useEffect(() => {
     if (!isReady) return;
     postBridgeMessage({
       type: "updatePickup",
-      pickup: pickup
-        ? {
-            lat: pickup.lat !== undefined ? pickup.lat : pickup.latitude,
-            lng: pickup.lng !== undefined ? pickup.lng : pickup.longitude,
-          }
-        : null,
+      pickup: sanitizedPickup,
     });
-  }, [isReady, pickup?.lat, pickup?.lng, pickup?.latitude, pickup?.longitude, postBridgeMessage]);
+  }, [isReady, sanitizedPickup, postBridgeMessage]);
 
   // Send updates to WebView whenever route changes
   const normalizedRoute = useMemo(() => normalizeRoutePoints(route), [route]);
@@ -469,7 +519,7 @@ const LeafletMap = forwardRef(function LeafletMap(
       <WebView
         key={reloadKey}
         ref={webViewRef}
-        originWhitelist={["*"]}
+        originWhitelist={["https://*", "about:blank"]}
         source={{ html: htmlContent }}
         javaScriptEnabled={true}
         domStorageEnabled={true}

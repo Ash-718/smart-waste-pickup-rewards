@@ -103,7 +103,7 @@ Many-to-many relationships are used where users can unlock multiple badges and r
 | Layer | Technology | Purpose |
 | --- | --- | --- |
 | Mobile Application | React Native (Expo) | Cross-platform mobile app for citizens and collectors |
-| Mobile Maps | react-native-maps | Native map views, markers, and polyline routing |
+| Mobile Maps | react-native-webview + Leaflet | Cross-platform interactive Leaflet map with Carto Voyager tiles, smooth SVG marker easing, and turn-by-turn polylines |
 | Admin Dashboard | React (Vite) + Tailwind CSS | Single-page administrative web dashboard |
 | Web Fleet Maps | Leaflet + react-leaflet | Interactive OpenStreetMap fleet monitoring |
 | Backend Runtime | Node.js | Central API server runtime |
@@ -518,8 +518,8 @@ Start the React Native application using Expo. Scan the QR code with the Expo Go
 
 > **Important Note for Standalone Builds (`app.json`):**
 > When generating standalone native production builds (via EAS Build, APK, or iOS Archive) rather than running in Expo Go:
-> 1. **Location Permissions:** Explicit permission strings must be configured in `mobile-app/app.json` under the `expo-location` plugin (`locationWhenInUsePermission` with `isIosBackgroundLocationEnabled: false` since the application operates foreground-only) so that native iOS (`NSLocationWhenInUseUsageDescription`) and Android manifest entries are properly compiled.
-> 2. **Google Maps API Key:** `react-native-maps` on Android requires a valid Google Maps API Key defined in `app.json` under `expo.android.config.googleMaps.apiKey`. (In Expo Go development, default native map providers are used automatically).
+> * **Location Permissions:** Explicit permission strings must be configured in `mobile-app/app.json` under the `expo-location` plugin (`locationWhenInUsePermission` with `isIosBackgroundLocationEnabled: false` since the application operates foreground-only) so that native iOS (`NSLocationWhenInUseUsageDescription`) and Android manifest entries are properly compiled.
+> * **Map Engine:** The mobile application renders maps via Leaflet inside `react-native-webview` with Carto Voyager tiles. No proprietary native map SDKs or Google Maps API keys are required for Android or iOS builds.
 
 ### 4. Admin Dashboard Setup
 
@@ -584,12 +584,12 @@ EXPO_PUBLIC_DEMO_MODE=false
 # Contact email sent in HTTP User-Agent for OpenStreetMap Nominatim geocoding
 EXPO_PUBLIC_CONTACT_EMAIL=your-email@example.com
 
-# OpenStreetMap tile server URL template (public OSM tiles are for demo use only)
-EXPO_PUBLIC_TILE_URL=https://tile.openstreetmap.org/{z}/{x}/{y}.png
+# Carto Voyager raster tile server (default for mobile Leaflet map)
+EXPO_PUBLIC_TILE_URL=https://a.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}.png
 ```
 
 > [!NOTE]
-> **Tile Server Usage Note:** Public OpenStreetMap tile servers (`https://tile.openstreetmap.org/...`) are intended for development, testing, and demo use only. For production deployments, configure `EXPO_PUBLIC_TILE_URL` to point to a commercial provider (e.g. Mapbox, Stadia Maps) or a self-hosted tile server in compliance with the [OpenStreetMap Tile Usage Policy](https://operations.osmfoundation.org/policies/tiles/).
+> **Tile Server Usage Note:** The mobile application defaults to Carto Voyager raster tiles (`https://a.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}.png`) with OpenStreetMap and CARTO attributions. For commercial, enterprise, or high-volume production deployments, configure `EXPO_PUBLIC_TILE_URL` to point to a commercial provider with a dedicated API key (e.g., CARTO Enterprise, Mapbox, Stadia Maps) or a self-hosted tile server in compliance with CARTO and OpenStreetMap tile usage policies.
 
 
 ### Admin Dashboard (`admin-dashboard/.env`)
@@ -739,9 +739,11 @@ node cleanup_test_data.js --dry-run
 * **Cause:** Vite bundling can break Leaflet's default PNG marker asset URLs.
 * **Solution:** The project includes an explicit Leaflet icon fix in `admin-dashboard/src/components/LiveFleetMap.jsx` using `L.Icon.Default.mergeOptions` pointing to bundled SVG markers.
 
-### 4. Expo Go Map Limitations
-* **Cause:** `react-native-maps` on Expo Go Android requires a Google Maps API Key; iOS uses Apple Maps.
-* **Solution:** The mobile app gracefully uses default native map providers. Coordinates and markers render cleanly on both platforms.
+### 4. Mobile Map Rendering in Expo Go
+* **Architecture:** The mobile application renders maps using Leaflet 1.9.4 inside a sandboxed `react-native-webview` with Carto Voyager raster tiles. This eliminates all dependencies on native Google Maps SDKs or Google Maps API keys on Android Expo Go.
+* **Troubleshooting:**
+  * **Offline Overlay:** If the map displays the offline overlay with a "Retry" button, verify the device has an active internet connection to download Leaflet from cdnjs and raster tiles from CARTO. Tap **Retry** to reload the map component.
+  * **Tile Server Reachability:** Verify `EXPO_PUBLIC_TILE_URL` in `mobile-app/.env` points to a reachable HTTPS tile server. When testing on physical devices, ensure the device is on a Wi-Fi network that allows outbound HTTPS connections to CARTO basemaps.
 
 ---
 
