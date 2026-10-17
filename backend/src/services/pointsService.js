@@ -12,7 +12,10 @@ async function completePickupAndAwardPoints(tx, pickup) {
 
   const updatedPickup = await tx.pickup.update({
     where: { id: pickup.id },
-    data: { status: "completed" },
+    data: {
+      status: "completed",
+      ...(pickup.wasteQuantity ? { wasteQuantity: pickup.wasteQuantity } : {}),
+    },
   });
 
   if (existingLedger) {

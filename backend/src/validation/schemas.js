@@ -33,30 +33,44 @@ const loginSchema = z
     path: ["email"],
   });
 
+function getAllowedPhotoHosts() {
+  return (process.env.PHOTO_ALLOWED_HOSTS || "res.cloudinary.com")
+    .split(",")
+    .map((h) => h.trim().toLowerCase())
+    .filter(Boolean);
+}
+
 const photoUrlValidator = z
   .string()
   .trim()
   .refine(
     (val) => {
       if (!val) return true;
-      if (val.startsWith("/uploads/")) {
-        // Must be a clean relative upload path without path traversal or protocol injection
-        return (
-          !val.includes("..") &&
-          !val.includes(":") &&
-          !val.toLowerCase().startsWith("/uploads/javascript") &&
-          !val.toLowerCase().startsWith("/uploads/data")
-        );
+
+      // Reject any encoded traversal attacks (%2e%2e, %2f, %5c)
+      if (/%2e/i.test(val) || /%2f/i.test(val) || /%5c/i.test(val) || val.includes("..")) {
+        return false;
       }
+
+      // 1. Local relative upload path: only /uploads/<random filename> with valid extension
+      if (val.startsWith("/uploads/")) {
+        return /^\/uploads\/[a-zA-Z0-9_-]+\.(jpg|jpeg|png|webp)$/i.test(val);
+      }
+
+      // 2. Remote HTTPS URL: must have https protocol and hostname in PHOTO_ALLOWED_HOSTS allowlist
       try {
         const parsed = new URL(val);
-        return parsed.protocol === "https:";
+        if (parsed.protocol !== "https:") return false;
+
+        const allowedHosts = getAllowedPhotoHosts();
+        return allowedHosts.includes(parsed.hostname.toLowerCase());
       } catch {
         return false;
       }
     },
     {
-      message: 'photoUrl must start with "/uploads/" or be a valid https:// URL',
+      message:
+        'photoUrl must be a local path like "/uploads/<filename>.(jpg|png|webp)" or an https URL from an allowed host',
     }
   )
   .optional();

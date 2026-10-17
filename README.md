@@ -439,6 +439,12 @@ All protected endpoints require appropriate authentication and authorization.
 * `GET /api/meta` — Platform configuration enums (waste types, quantity bands, slot periods).
 * `POST /api/uploads` — Upload photo proof for pickups.
 
+#### Photo Uploads & Static Storage
+* `POST /api/uploads` — Authenticated photo upload for pickups (requires `requireAuth`). Accepts JPEG, PNG, and WebP images up to 5MB. When Cloudinary credentials are not configured (`CLOUDINARY_*` empty), the server automatically falls back to local disk storage in `backend/uploads/`.
+* `GET /uploads/<filename>` — Static route serving locally stored pickup images with security header `X-Content-Type-Options: nosniff`.
+  * **Public Serving & Random Filenames:** Files in `/uploads` are served publicly by the web server. To prevent guessing or enumeration, files are saved with unguessable, cryptographically random filenames generated at runtime (e.g., `pickup_<timestamp>_<hex>.<ext>`). Directory indexing is disabled.
+  * **Validation & Host Allowlist:** When creating pickups, `photoUrl` accepts either local relative paths (`/uploads/<random filename>.<ext>`) or HTTPS URLs hosted on trusted domains configured in `PHOTO_ALLOWED_HOSTS` (defaults to `res.cloudinary.com`). Encoded traversal sequences (`%2e%2e`, `%2f`, `%5c`, `..`) and untrusted protocols (`http:`, `javascript:`, `data:`) are strictly rejected.
+
 ### Real-Time WebSocket Events (Socket.IO)
 
 All Socket.IO connections require a valid JWT passed in `auth.token`.
@@ -493,6 +499,10 @@ npm start
 ```
 
 The API and Socket.IO server will listen on `http://localhost:4000`.
+
+> **Process Lifecycle Note:** `npm start` executes `node src/app.js` directly. If a fatal unhandled error occurs, the server logs the error and exits with code 1 without auto-restarting.
+> * For **local development**, use `npm run dev` which uses `nodemon` to automatically restart on file changes and recoverable errors.
+> * For **production environments**, run the backend under a process manager (such as [PM2](https://pm2.keymetrics.io/), systemd, or a Docker container with `restart: unless-stopped`) to ensure automatic process restarts after fatal failures.
 
 ### 3. Mobile Application Setup
 
@@ -556,6 +566,9 @@ DEV_SKIP_ARRIVAL_RADIUS="false"
 
 # Location history retention period (days)
 LOCATION_RETENTION_DAYS=7
+
+# Allowed HTTPS hosts for pickup photo URLs (comma-separated, default: res.cloudinary.com)
+PHOTO_ALLOWED_HOSTS="res.cloudinary.com"
 ```
 
 ### Mobile App (`mobile-app/.env`)
@@ -640,30 +653,66 @@ Driver GPS telemetry is broadcast and recorded **only during an active in-transi
 
 ## Automated Test Commands
 
+The repository provides several specialized test suites and verification scripts located in `backend/`:
+
 ```bash
-# 1. Run Comprehensive Security, WebSocket & End-to-End Tracking Test Suite
+# 1. Run Unit Tests for Photo URL Validation & Traversal Security
+cd backend
+npm test
+# (Runs node test_photo_url_validation.js)
+
+# 2. Run Comprehensive Security, WebSocket & End-to-End Tracking Test Suite
 cd backend
 node test_tracking_and_sockets.js
 
-# 2. Run Admin Analytics, Rewards & Points Flow Tests
+# 3. Run Admin Analytics, Rewards & Points Flow Tests
 cd backend
 node test_complete_flow.js
+
+# 4. Run End-to-End QA Verification Suite
+cd backend
+node qa_verification_test.js
+
+# 5. Audit Test-Created Database Records (Dry-Run Preview)
+cd backend
+node cleanup_test_data.js --dry-run
 ```
 
-**What `test_tracking_and_sockets.js` validates:**
-* Unauthorized citizen blocked from tracking endpoint (`HTTP 403 Forbidden`)
-* Owner citizen receives complete tracking payload with OSRM navigation (`HTTP 200 OK`)
-* In-transit vehicle reassignment blocked with `HTTP 409 Conflict`
-* In-transit pickup cancellation blocked with `HTTP 400 Bad Request`
-* **SECURITY:** Driver calling status endpoint with `skipArrivalRadiusCheck: true` from outside the radius is strictly rejected with `HTTP 400`
-* Arrival check with missing vehicle coordinates or stale (>60s) telemetry rejected with `HTTP 400`
-* Arrival check with missing pickup destination coordinates rejected with `HTTP 400`
-* Assigning non-collector user to vehicle rejected with `HTTP 400`
-* Reassigning busy collector to second vehicle rejected with `HTTP 400`
-* Deactivating vehicle or changing driver with active assignments blocked with `HTTP 409 Conflict`
-* Socket.IO JWT authentication failure handling during handshake
-* Multi-room Socket.IO broadcasts and room isolation verification
-* Full 8-step lifecycle execution with a brand-new, non-seeded pickup
+### Test Suite Descriptions
+
+* **`npm test` (`test_photo_url_validation.js`):**
+  * Validates relative paths: allows only `/uploads/<random-filename>.<ext>` (`.jpg`, `.jpeg`, `.png`, `.webp`).
+  * Validates HTTPS URLs: verifies hostname against allowlist configured in `PHOTO_ALLOWED_HOSTS` (defaults to `res.cloudinary.com`).
+  * Enforces traversal rejection: rejects encoded traversal sequences (`%2e%2e`, `%2f`, `%5c`, `..`) and path navigation attempts.
+  * Rejects non-allowlisted domains, insecure plain HTTP (`http://`), and dangerous schemes (`javascript:`, `data:`, `ftp:`).
+
+* **`node test_tracking_and_sockets.js`:**
+  * Unauthorized citizen blocked from tracking endpoint (`HTTP 403 Forbidden`).
+  * Owner citizen receives complete tracking payload with OSRM navigation (`HTTP 200 OK`).
+  * In-transit vehicle reassignment blocked with `HTTP 409 Conflict`.
+  * In-transit pickup cancellation blocked with `HTTP 400 Bad Request`.
+  * **SECURITY:** Driver calling status endpoint with `skipArrivalRadiusCheck: true` from outside the radius is strictly rejected with `HTTP 400`.
+  * Arrival check with missing vehicle coordinates or stale (>60s) telemetry rejected with `HTTP 400`.
+  * Arrival check with missing pickup destination coordinates rejected with `HTTP 400`.
+  * Assigning non-collector user to vehicle rejected with `HTTP 400`.
+  * Reassigning busy collector to second vehicle rejected with `HTTP 400`.
+  * Deactivating vehicle or changing driver with active assignments blocked with `HTTP 409 Conflict`.
+  * Socket.IO JWT authentication failure handling during handshake.
+  * Multi-room Socket.IO broadcasts and room isolation verification.
+  * Full 8-step lifecycle execution with automated test user teardown.
+
+* **`node test_complete_flow.js`:**
+  * Complete lifecycle test from citizen registration, pickup creation, vehicle dispatch, in-transit telemetry, arrival, and completion.
+  * Verifies scale-measured waste weight calculation, Green Points ledger crediting, and reward catalog redemption.
+  * Includes automated teardown removing all generated test entities.
+
+* **`node qa_verification_test.js`:**
+  * End-to-end regression verification covering citizen authentication, booking, admin dispatch queues, driver workflow, tracking payloads, impact metrics, and clean test teardown.
+
+* **`node cleanup_test_data.js --dry-run`:**
+  * Non-destructive audit utility that identifies all test-created accounts (`testcitizen_%`), test vehicles (`TST-*`, `FLW-*`), and ephemeral test badges/rewards.
+  * Cross-references all 10 protected NGO accounts to ensure zero accidental modifications.
+  * Actual deletion requires `--execute` and explicit typed confirmation (`DELETE TEST DATA`), and is strictly forbidden when `NODE_ENV=production`.
 
 ---
 

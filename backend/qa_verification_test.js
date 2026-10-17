@@ -109,10 +109,14 @@ async function runQa() {
   if (dbPickup1.status !== "requested") throw new Error("DB status mismatch for pickup1");
   console.log(`✓ [4/15] DB verified: Pickup #1 in PostgreSQL with status=requested, wasteQuantity=${dbPickup1.wasteQuantity}`);
 
-  // 4. Admin fetches collectors and assigns pickup #1 to collector
+  // 4. Admin fetches collectors and assigns pickup #1 to collector with an active vehicle
   const colRes = await req("/admin/collectors", "GET", adminToken);
-  const collector = colRes.data.collectors[0];
-  if (!collector) throw new Error("No collectors found");
+  const vehRes = await req("/admin/vehicles", "GET", adminToken);
+  const activeVehicle = vehRes.data?.vehicles?.find(
+    (v) => v.isActive && v.driverId && v.driver?.role === "collector"
+  );
+  const collector = activeVehicle ? activeVehicle.driver : colRes.data.collectors.find((c) => c.role === "collector");
+  if (!collector) throw new Error("No eligible collector with assigned vehicle found");
   console.log(`✓ [5/15] Found collector: ${collector.name} (ID: ${collector.id})`);
 
   const assignRes = await req(`/pickups/${pickup1.id}/assign`, "PATCH", adminToken, {
