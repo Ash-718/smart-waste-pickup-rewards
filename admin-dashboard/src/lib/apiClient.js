@@ -37,6 +37,10 @@ async function apiFetch(path, { method = "GET", body, isFormData = false } = {})
   if (!res.ok) {
     throw new ApiError(data?.error || `Request failed (${res.status})`, res.status, data?.details);
   }
+
+  return data;
+}
+
 function getMediaUrl(relativeOrAbsoluteUrl) {
   if (!relativeOrAbsoluteUrl) return null;
   if (relativeOrAbsoluteUrl.startsWith("http://") || relativeOrAbsoluteUrl.startsWith("https://")) {
