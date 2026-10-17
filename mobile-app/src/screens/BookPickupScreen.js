@@ -10,6 +10,8 @@ import {
   View,
 } from "react-native";
 import * as ImagePicker from "expo-image-picker";
+import * as Location from "expo-location";
+import { Ionicons } from "@expo/vector-icons";
 import DateTimePicker from "@react-native-community/datetimepicker";
 import Screen from "../components/Screen";
 import ChipSelector from "../components/ChipSelector";
@@ -32,6 +34,8 @@ export default function BookPickupScreen({ navigation }) {
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [photoUrl, setPhotoUrl] = useState(null);
   const [photoPreviewUri, setPhotoPreviewUri] = useState(null);
+  const [coordinates, setCoordinates] = useState(null);
+  const [locating, setLocating] = useState(false);
   const [error, setError] = useState(null);
 
   const uploadMutation = useMutation({ mutationFn: uploadPickupPhoto });
@@ -105,12 +109,114 @@ export default function BookPickupScreen({ navigation }) {
     setPhotoUrl(null);
   }
 
-  function handleSubmit() {
+  async function handleDetectLocation() {
+    setLocating(true);
+    setError(null);
+    try {
+      const { status } = await Location.requestForegroundPermissionsAsync();
+      if (status !== "granted") {
+        setError("Location permission denied. Please enter address manually.");
+        setLocating(false);
+        return;
+      }
+      const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.High });
+      if (loc?.coords) {
+        const coords = {
+          latitude: parseFloat(loc.coords.latitude.toFixed(6)),
+          longitude: parseFloat(loc.coords.longitude.toFixed(6)),
+        };
+        setCoordinates(coords);
+
+        // Autofill address via reverse geocoding if empty
+        if (!address.trim()) {
+          try {
+            const geocoded = await Location.reverseGeocodeAsync({
+              latitude: loc.coords.latitude,
+              longitude: loc.coords.longitude,
+            });
+            if (geocoded && geocoded.length > 0) {
+              const g = geocoded[0];
+              const parts = [g.name, g.street, g.subregion || g.district, g.city, g.postalCode].filter(
+                Boolean
+              );
+              if (parts.length > 0) {
+                setAddress(parts.join(", "));
+              }
+            }
+          } catch (geoErr) {
+            // Geocoding optional; coordinates already saved
+          }
+        }
+      }
+    } catch (err) {
+      setError("Unable to get current GPS location: " + err.message);
+    } finally {
+      setLocating(false);
+    }
+  }
+
+  async function resolveAddressToCoordinates(addr) {
+    // 1. Try native geocoding via expo-location
+    try {
+      const results = await Location.geocodeAsync(addr);
+      if (results && results.length > 0 && results[0].latitude && results[0].longitude) {
+        return {
+          latitude: parseFloat(results[0].latitude.toFixed(6)),
+          longitude: parseFloat(results[0].longitude.toFixed(6)),
+        };
+      }
+    } catch (e) {
+      // Fall through to Nominatim
+    }
+
+    // 2. Try OpenStreetMap Nominatim with proper User-Agent
+    const contactEmail = process.env.EXPO_PUBLIC_CONTACT_EMAIL || "support@pruthvi.ngo";
+    try {
+      const res = await fetch(
+        `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(addr)}&limit=1`,
+        {
+          headers: {
+            "User-Agent": `WasteWise-App/1.0 (${contactEmail})`,
+            Accept: "application/json",
+          },
+        }
+      );
+      if (res.ok) {
+        const data = await res.json();
+        if (data && data.length > 0 && data[0].lat && data[0].lon) {
+          return {
+            latitude: parseFloat(parseFloat(data[0].lat).toFixed(6)),
+            longitude: parseFloat(parseFloat(data[0].lon).toFixed(6)),
+          };
+        }
+      }
+    } catch (e) {
+      // Nominatim failed or offline
+    }
+
+    return null;
+  }
+
+  async function handleSubmit() {
     setError(null);
     if (!wasteType) return setError("Choose a waste type");
     if (!quantityBand) return setError("Choose a quantity");
     if (!slotPeriod) return setError("Choose a pickup slot");
     if (!address.trim()) return setError("Address is required");
+
+    let finalCoords = coordinates;
+    if (!finalCoords) {
+      setLocating(true);
+      finalCoords = await resolveAddressToCoordinates(address.trim());
+      setLocating(false);
+      if (finalCoords) {
+        setCoordinates(finalCoords);
+      } else {
+        return setError(
+          "Could not determine GPS coordinates for this address. Please tap 'Use Current GPS Location' above to pinpoint your pickup location."
+        );
+      }
+    }
 
     createMutation.mutate({
       wasteType,
@@ -119,6 +225,8 @@ export default function BookPickupScreen({ navigation }) {
       address: address.trim(),
       requestedDate: requestedDate.toISOString(),
       ...(photoUrl ? { photoUrl } : {}),
+      latitude: finalCoords.latitude,
+      longitude: finalCoords.longitude,
     });
   }
 
@@ -152,6 +260,47 @@ export default function BookPickupScreen({ navigation }) {
         multiline
         placeholder="House / street / area"
       />
+
+      {/* GPS Location Pinning Button & Indicator */}
+      <View style={{ marginBottom: 16 }}>
+        <Pressable
+          onPress={handleDetectLocation}
+          disabled={locating}
+          style={{
+            flexDirection: "row",
+            alignItems: "center",
+            alignSelf: "flex-start",
+            paddingHorizontal: 12,
+            paddingVertical: 7,
+            borderRadius: 8,
+            backgroundColor: coordinates ? colors.brand50 : colors.neutral100,
+            borderWidth: 1,
+            borderColor: coordinates ? colors.brand200 : colors.neutral200,
+          }}
+        >
+          {locating ? (
+            <ActivityIndicator size="small" color={colors.brand700} style={{ marginRight: 6 }} />
+          ) : (
+            <Ionicons
+              name={coordinates ? "location" : "location-outline"}
+              size={16}
+              color={coordinates ? colors.brand700 : colors.neutral600}
+              style={{ marginRight: 6 }}
+            />
+          )}
+          <Text
+            style={{
+              fontSize: 12,
+              fontWeight: "600",
+              color: coordinates ? colors.brand800 : colors.neutral700,
+            }}
+          >
+            {coordinates
+              ? `GPS Attached (${coordinates.latitude.toFixed(4)}, ${coordinates.longitude.toFixed(4)})`
+              : "Use Current GPS Location"}
+          </Text>
+        </Pressable>
+      </View>
 
       <View style={styles.field}>
         <Text style={styles.label}>Pickup date</Text>

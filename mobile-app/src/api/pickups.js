@@ -16,3 +16,7 @@ export function createPickup(payload) {
 export function getMyImpact() {
   return apiFetch("/pickups/my-impact");
 }
+
+export function getPickupTracking(id) {
+  return apiFetch(`/pickups/${id}/tracking`);
+}

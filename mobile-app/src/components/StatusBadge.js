@@ -4,6 +4,8 @@ import { colors } from "../theme/colors";
 const STYLES = {
   requested: { bg: colors.amber50, text: colors.amber700 },
   assigned: { bg: colors.blue50, text: colors.blue700 },
+  on_the_way: { bg: "#eef2ff", text: "#4338ca" },
+  arrived: { bg: "#faf5ff", text: "#7e22ce" },
   completed: { bg: colors.brand100, text: colors.brand800 },
   rejected: { bg: colors.red50, text: colors.red600 },
   cancelled: { bg: colors.neutral100, text: colors.neutral600 },
@@ -12,6 +14,8 @@ const STYLES = {
 const LABELS = {
   requested: "Requested",
   assigned: "Assigned",
+  on_the_way: "On the way",
+  arrived: "Arrived",
   completed: "Completed",
   rejected: "Rejected",
   cancelled: "Cancelled",
