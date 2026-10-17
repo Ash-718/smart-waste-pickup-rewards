@@ -49,6 +49,14 @@ app.use("/api/uploads", uploadRoutes);
 app.use((req, res) => res.status(404).json({ error: "Not found" }));
 app.use(errorHandler);
 
+// Global unhandled promise rejection and exception loggers to prevent silent server death
+process.on("unhandledRejection", (reason, promise) => {
+  console.error("[Fatal] Unhandled Rejection at:", promise, "reason:", reason);
+});
+process.on("uncaughtException", (err) => {
+  console.error("[Fatal] Uncaught Exception:", err);
+});
+
 const PORT = process.env.PORT || 4000;
 const server = http.createServer(app);
 initSocketServer(server);

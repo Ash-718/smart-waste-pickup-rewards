@@ -3,6 +3,7 @@ import { useParams, useNavigate } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { getPickup, updatePickupStatus } from "../api/pickups";
 import { updatePickupCoordinates } from "../api/admin";
+import { getMediaUrl } from "../lib/apiClient";
 import { useMeta } from "../hooks/useMeta";
 import StatusBadge from "../components/StatusBadge";
 import ErrorState from "../components/ErrorState";
@@ -350,7 +351,7 @@ export default function PickupDetailPage() {
               Citizen Photo Upload
             </h3>
             <img
-              src={pickup.photoUrl}
+              src={getMediaUrl(pickup.photoUrl)}
               alt="Pickup item"
               className="h-56 w-full max-w-md rounded-xl object-cover ring-1 ring-neutral-200"
             />

@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   ActivityIndicator,
+  Alert,
   Image,
   Platform,
   Pressable,
@@ -10,6 +11,7 @@ import {
   View,
 } from "react-native";
 import * as ImagePicker from "expo-image-picker";
+import * as ImageManipulator from "expo-image-manipulator";
 import * as Location from "expo-location";
 import { Ionicons } from "@expo/vector-icons";
 import DateTimePicker from "@react-native-community/datetimepicker";
@@ -49,6 +51,7 @@ export default function BookPickupScreen({ navigation }) {
 
   const [selectedAsset, setSelectedAsset] = useState(null);
   const [isUploadingPhoto, setIsUploadingPhoto] = useState(false);
+  const [uploadProgressText, setUploadProgressText] = useState("Uploading photo...");
 
   function processSelectedAsset(asset) {
     setSelectedAsset(asset);
@@ -195,6 +198,19 @@ export default function BookPickupScreen({ navigation }) {
     return null;
   }
 
+  function sendCreateRequest(finalCoords, finalPhotoUrl) {
+    createMutation.mutate({
+      wasteType,
+      quantityBand,
+      slotPeriod,
+      address: address.trim(),
+      requestedDate: requestedDate.toISOString(),
+      ...(finalPhotoUrl ? { photoUrl: finalPhotoUrl } : {}),
+      latitude: finalCoords.latitude,
+      longitude: finalCoords.longitude,
+    });
+  }
+
   async function handleSubmit() {
     setError(null);
     if (!wasteType) return setError("Choose a waste type");
@@ -219,28 +235,65 @@ export default function BookPickupScreen({ navigation }) {
     let uploadedPhotoUrl = photoUrl;
     if (selectedAsset && !uploadedPhotoUrl) {
       setIsUploadingPhoto(true);
+      let assetToUpload = selectedAsset;
+
       try {
-        const uploadRes = await uploadMutation.mutateAsync(selectedAsset);
+        setUploadProgressText("Compressing image...");
+        const manipResult = await ImageManipulator.manipulateAsync(
+          selectedAsset.uri,
+          [{ resize: { width: 1280 } }],
+          { compress: 0.7, format: ImageManipulator.SaveFormat.JPEG }
+        );
+        assetToUpload = {
+          ...selectedAsset,
+          uri: manipResult.uri,
+          type: "image/jpeg",
+          name: selectedAsset.name?.replace(/\.[^/.]+$/, ".jpg") || "pickup_photo.jpg",
+        };
+      } catch (compErr) {
+        // Fall back to original asset if manipulation fails
+      }
+
+      try {
+        setUploadProgressText("Uploading photo...");
+        const uploadRes = await uploadMutation.mutateAsync(assetToUpload);
         uploadedPhotoUrl = uploadRes.photoUrl;
         setPhotoUrl(uploadedPhotoUrl);
       } catch (uploadErr) {
         setIsUploadingPhoto(false);
-        return setError("Photo upload failed: " + (uploadErr.message || "Network error. Please try again or remove photo."));
+        const errorDetail = uploadErr?.message || "Upload failed";
+        setError(`Photo upload failed: ${errorDetail}`);
+        Alert.alert(
+          "Photo Upload Failed",
+          `${errorDetail}\n\nPhoto is optional. Would you like to retry or continue without the photo?`,
+          [
+            {
+              text: "Retry",
+              onPress: () => handleSubmit(),
+            },
+            {
+              text: "Continue Without Photo",
+              onPress: () => {
+                setSelectedAsset(null);
+                setPhotoPreviewUri(null);
+                setPhotoUrl(null);
+                setError(null);
+                sendCreateRequest(finalCoords, null);
+              },
+            },
+            {
+              text: "Cancel",
+              style: "cancel",
+            },
+          ]
+        );
+        return;
       } finally {
         setIsUploadingPhoto(false);
       }
     }
 
-    createMutation.mutate({
-      wasteType,
-      quantityBand,
-      slotPeriod,
-      address: address.trim(),
-      requestedDate: requestedDate.toISOString(),
-      ...(uploadedPhotoUrl ? { photoUrl: uploadedPhotoUrl } : {}),
-      latitude: finalCoords.latitude,
-      longitude: finalCoords.longitude,
-    });
+    sendCreateRequest(finalCoords, uploadedPhotoUrl);
   }
 
   const submitting = createMutation.isPending || isUploadingPhoto;
@@ -356,7 +409,7 @@ export default function BookPickupScreen({ navigation }) {
             {isUploadingPhoto && (
               <View style={styles.photoOverlay}>
                 <ActivityIndicator color={colors.white} />
-                <Text style={styles.uploadingText}>Uploading photo...</Text>
+                <Text style={styles.uploadingText}>{uploadProgressText}</Text>
               </View>
             )}
             <View style={styles.photoActionRow}>

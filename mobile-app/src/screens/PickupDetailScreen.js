@@ -9,6 +9,7 @@ import ErrorState from "../components/ErrorState";
 import { useMeta } from "../hooks/useMeta";
 import { getPickup } from "../api/pickups";
 import { colors } from "../theme/colors";
+import { getMediaUrl } from "../lib/apiClient";
 
 function Row({ label, value }) {
   return (
@@ -95,7 +96,7 @@ export default function PickupDetailScreen({ route, navigation }) {
         )}
 
         {pickup.photoUrl && (
-          <Image source={{ uri: pickup.photoUrl }} style={styles.photo} resizeMode="cover" />
+          <Image source={{ uri: getMediaUrl(pickup.photoUrl) }} style={styles.photo} resizeMode="cover" />
         )}
       </Card>
 

@@ -40,7 +40,7 @@ const createPickupSchema = z.object({
   address: z.string().trim().min(1, "Address is required"),
   slotPeriod: z.enum(slotPeriodValues),
   requestedDate: z.coerce.date(),
-  photoUrl: z.string().url().optional(),
+  photoUrl: z.string().trim().min(1).optional(),
   latitude: z.number().min(-90).max(90).nullable().optional(),
   longitude: z.number().min(-180).max(180).nullable().optional(),
 });

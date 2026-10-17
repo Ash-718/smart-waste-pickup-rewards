@@ -37,7 +37,14 @@ async function apiFetch(path, { method = "GET", body, isFormData = false } = {})
   if (!res.ok) {
     throw new ApiError(data?.error || `Request failed (${res.status})`, res.status, data?.details);
   }
-  return data;
+function getMediaUrl(relativeOrAbsoluteUrl) {
+  if (!relativeOrAbsoluteUrl) return null;
+  if (relativeOrAbsoluteUrl.startsWith("http://") || relativeOrAbsoluteUrl.startsWith("https://")) {
+    return relativeOrAbsoluteUrl;
+  }
+  const base = SOCKET_BASE_URL;
+  const cleanPath = relativeOrAbsoluteUrl.startsWith("/") ? relativeOrAbsoluteUrl : `/${relativeOrAbsoluteUrl}`;
+  return `${base}${cleanPath}`;
 }
 
-export { apiFetch, setAuthToken, getAuthToken, API_BASE_URL, SOCKET_BASE_URL, ApiError };
+export { apiFetch, setAuthToken, getAuthToken, API_BASE_URL, SOCKET_BASE_URL, ApiError, getMediaUrl };

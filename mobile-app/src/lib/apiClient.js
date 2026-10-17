@@ -92,7 +92,10 @@ async function apiFetch(path, { method = "GET", body, isFormData = false } = {})
     if (err.name === "AbortError") {
       throw new ApiError("The WasteWise server took too long to respond. Try again.", 0);
     }
-    throw new ApiError("Unable to connect to the server. Please try again.", 0);
+    throw new ApiError(
+      `Unable to connect to server: ${err.message || "Network request failed"}. Check your Wi-Fi connection.`,
+      0
+    );
   } finally {
     clearTimeout(timeout);
   }
@@ -104,7 +107,7 @@ async function apiFetch(path, { method = "GET", body, isFormData = false } = {})
     if (res.status === 401 && onUnauthorizedHandler && authToken) {
       onUnauthorizedHandler();
     }
-    throw new ApiError(data?.error || `Request failed (${res.status})`, res.status, data?.details);
+    throw new ApiError(data?.error || `Upload/Request failed (${res.status})`, res.status, data?.details);
   }
   return data;
 }
@@ -123,6 +126,16 @@ function resolveSocketBaseUrl() {
 
 const SOCKET_BASE_URL = resolveSocketBaseUrl();
 
+function getMediaUrl(relativeOrAbsoluteUrl) {
+  if (!relativeOrAbsoluteUrl) return null;
+  if (relativeOrAbsoluteUrl.startsWith("http://") || relativeOrAbsoluteUrl.startsWith("https://")) {
+    return relativeOrAbsoluteUrl;
+  }
+  const base = resolveSocketBaseUrl();
+  const cleanPath = relativeOrAbsoluteUrl.startsWith("/") ? relativeOrAbsoluteUrl : `/${relativeOrAbsoluteUrl}`;
+  return `${base}${cleanPath}`;
+}
+
 export {
   apiFetch,
   setAuthToken,
@@ -131,5 +144,6 @@ export {
   ApiError,
   API_BASE_URL,
   SOCKET_BASE_URL,
+  getMediaUrl,
 };
 
