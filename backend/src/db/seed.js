@@ -73,9 +73,9 @@ async function main() {
   const driverPasswordHash = await bcrypt.hash("Driver@123", 10);
   const driver = await prisma.user.upsert({
     where: { email: driverEmail },
-    update: { role: "collector" },
+    update: { role: "collector", name: "Ramesh Shinde" },
     create: {
-      name: "Ramesh Shinde (Fleet Collector)",
+      name: "Ramesh Shinde",
       email: driverEmail,
       phone: "+919820112233",
       passwordHash: driverPasswordHash,

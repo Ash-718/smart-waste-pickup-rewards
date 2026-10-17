@@ -40,6 +40,11 @@ function formatSlotAndDate(slotPeriod, requestedDate, slotPeriodLabel) {
   return formattedDate ? `${periodName} · ${formattedDate}` : periodName;
 }
 
+function stripCollectorSuffix(name) {
+  if (!name) return "";
+  return name.replace(/\s*\(Fleet Collector\)/gi, "").trim();
+}
+
 export default function PickupQueuePage() {
   const [statusFilter, setStatusFilter] = useState("all");
   const [searchTerm, setSearchTerm] = useState("");
@@ -211,18 +216,33 @@ export default function PickupQueuePage() {
                     {/* Assigned Staff: Vehicle reg & driver name only */}
                     <td className="px-4 py-3.5 whitespace-nowrap text-neutral-700">
                       {p.assignments?.[0]?.vehicle ? (
-                        <div className="truncate max-w-[160px] lg:max-w-[180px]">
-                          <div className="font-semibold text-emerald-800 flex items-center gap-1.5 truncate">
-                            <span>🚛</span>
-                            <span className="truncate">{p.assignments[0].vehicle.registrationNo}</span>
+                        p.assignments[0].vehicle.registrationNo === "LEGACY-UNASSIGNED" ? (
+                          <div className="truncate max-w-[160px] lg:max-w-[180px]">
+                            <span className="inline-flex items-center px-2 py-0.5 rounded-md text-[11px] font-semibold bg-amber-50 text-amber-800 border border-amber-200">
+                              Needs vehicle
+                            </span>
+                            {p.assignments[0].vehicle.driver?.name && (
+                              <div className="text-[11px] text-neutral-500 truncate mt-0.5">
+                                {stripCollectorSuffix(p.assignments[0].vehicle.driver.name)}
+                              </div>
+                            )}
                           </div>
-                          <div className="text-[11px] text-neutral-500 truncate">
-                            {p.assignments[0].vehicle.driver?.name || "Driver Unassigned"}
+                        ) : (
+                          <div className="truncate max-w-[160px] lg:max-w-[180px]">
+                            <div className="font-semibold text-emerald-800 flex items-center gap-1.5 truncate">
+                              <span>🚛</span>
+                              <span className="truncate">{p.assignments[0].vehicle.registrationNo}</span>
+                            </div>
+                            <div className="text-[11px] text-neutral-500 truncate">
+                              {stripCollectorSuffix(p.assignments[0].vehicle.driver?.name) || "Driver Unassigned"}
+                            </div>
                           </div>
-                        </div>
+                        )
                       ) : p.assignedAdmin ? (
                         <div className="truncate max-w-[160px]">
-                          <div className="font-medium text-neutral-900 truncate">{p.assignedAdmin.name}</div>
+                          <div className="font-medium text-neutral-900 truncate">
+                            {stripCollectorSuffix(p.assignedAdmin.name)}
+                          </div>
                         </div>
                       ) : (
                         <span className="text-neutral-400 italic">Unassigned</span>

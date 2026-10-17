@@ -12,6 +12,11 @@ import AssignVehicleModal from "../components/AssignVehicleModal";
 import RejectPickupModal from "../components/RejectPickupModal";
 import UserProfileModal from "../components/UserProfileModal";
 
+function stripCollectorSuffix(name) {
+  if (!name) return "";
+  return name.replace(/\s*\(Fleet Collector\)/gi, "").trim();
+}
+
 export default function PickupDetailPage() {
   const { id } = useParams();
   const navigate = useNavigate();
@@ -217,15 +222,21 @@ export default function PickupDetailPage() {
             <dt className="font-semibold uppercase tracking-wider text-neutral-500">Assigned Fleet Vehicle</dt>
             <dd className="mt-1 text-sm font-bold text-neutral-900">
               {pickup.assignments?.[0]?.vehicle ? (
-                <>
-                  <span className="flex items-center gap-1.5 text-emerald-800">
-                    <span>🚛</span>
-                    <span>{pickup.assignments[0].vehicle.registrationNo}</span>
+                pickup.assignments[0].vehicle.registrationNo === "LEGACY-UNASSIGNED" ? (
+                  <span className="inline-flex items-center px-2 py-0.5 rounded-md text-xs font-semibold bg-amber-50 text-amber-800 border border-amber-200">
+                    Needs vehicle
                   </span>
-                  <span className="block text-xs font-normal text-neutral-500 mt-0.5">
-                    {pickup.assignments[0].vehicle.type} ({pickup.assignments[0].vehicle.capacity}kg)
-                  </span>
-                </>
+                ) : (
+                  <>
+                    <span className="flex items-center gap-1.5 text-emerald-800">
+                      <span>🚛</span>
+                      <span>{pickup.assignments[0].vehicle.registrationNo}</span>
+                    </span>
+                    <span className="block text-xs font-normal text-neutral-500 mt-0.5">
+                      {pickup.assignments[0].vehicle.type} ({pickup.assignments[0].vehicle.capacity}kg)
+                    </span>
+                  </>
+                )
               ) : (
                 <span className="text-neutral-400 font-normal italic">No fleet vehicle assigned</span>
               )}
@@ -237,7 +248,7 @@ export default function PickupDetailPage() {
             <dd className="mt-1 text-sm font-bold text-blue-900">
               {pickup.assignments?.[0]?.vehicle?.driver ? (
                 <>
-                  {pickup.assignments[0].vehicle.driver.name}
+                  {stripCollectorSuffix(pickup.assignments[0].vehicle.driver.name)}
                   {pickup.assignments[0].vehicle.driver.phone && (
                     <span className="block text-xs font-normal text-neutral-500">
                       Phone: {pickup.assignments[0].vehicle.driver.phone}
@@ -246,7 +257,7 @@ export default function PickupDetailPage() {
                 </>
               ) : pickup.assignedAdmin ? (
                 <>
-                  {pickup.assignedAdmin.name} ({pickup.assignedAdmin.role})
+                  {stripCollectorSuffix(pickup.assignedAdmin.name)} ({pickup.assignedAdmin.role})
                   {pickup.assignedAt && (
                     <span className="block text-xs font-normal text-neutral-500">
                       Assigned on {new Date(pickup.assignedAt).toLocaleDateString()}
