@@ -35,14 +35,23 @@ async function main() {
   }
   console.log(`✓ Seeded ${BADGES.length} badges.`);
 
-  // 2. Seed Starter Rewards (idempotent find + create)
+  // 2. Seed Starter Rewards (idempotent upsert by name)
   for (const reward of STARTER_REWARDS) {
     const existing = await prisma.reward.findFirst({ where: { name: reward.name } });
-    if (!existing) {
+    if (existing) {
+      await prisma.reward.update({
+        where: { id: existing.id },
+        data: {
+          pointsRequired: reward.pointsRequired,
+          stock: reward.stock,
+          description: reward.description,
+        },
+      });
+    } else {
       await prisma.reward.create({ data: reward });
     }
   }
-  console.log(`✓ Seeded ${STARTER_REWARDS.length} starter rewards.`);
+  console.log(`✓ Upserted ${STARTER_REWARDS.length} starter rewards.`);
 
   // 3. Admin Account (idempotent upsert by email)
   const adminEmail = "admin@wastewise.local";

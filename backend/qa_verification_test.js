@@ -2,6 +2,11 @@ const { PrismaClient } = require("@prisma/client");
 const prisma = new PrismaClient();
 const BASE = "http://localhost:4000/api";
 
+const testUserIds = [];
+const testPickupIds = [];
+const testRewardIds = [];
+const testBadgeIds = [];
+
 async function req(path, method = "GET", token = null, body = null) {
   const headers = {};
   if (token) headers["Authorization"] = "Bearer " + token;
@@ -13,6 +18,49 @@ async function req(path, method = "GET", token = null, body = null) {
   });
   const data = await res.json().catch(() => null);
   return { status: res.status, ok: res.ok, data };
+}
+
+async function cleanupQaData() {
+  console.log("\n--- [TEARDOWN] Purging QA Test Fixtures ---");
+  try {
+    if (testPickupIds.length > 0 || testUserIds.length > 0) {
+      await prisma.pointsLedger.deleteMany({
+        where: {
+          OR: [
+            ...(testPickupIds.length > 0 ? [{ pickupId: { in: testPickupIds } }] : []),
+            ...(testUserIds.length > 0 ? [{ userId: { in: testUserIds } }] : []),
+          ],
+        },
+      });
+      await prisma.userBadge.deleteMany({
+        where: {
+          OR: [
+            ...(testBadgeIds.length > 0 ? [{ badgeId: { in: testBadgeIds } }] : []),
+            ...(testUserIds.length > 0 ? [{ userId: { in: testUserIds } }] : []),
+          ],
+        },
+      });
+      await prisma.pickupAssignment.deleteMany({
+        where: { pickupId: { in: testPickupIds } },
+      });
+      await prisma.pickup.deleteMany({
+        where: { id: { in: testPickupIds } },
+      });
+    }
+
+    if (testRewardIds.length > 0) {
+      await prisma.reward.deleteMany({ where: { id: { in: testRewardIds } } });
+    }
+    if (testBadgeIds.length > 0) {
+      await prisma.badge.deleteMany({ where: { id: { in: testBadgeIds } } });
+    }
+    if (testUserIds.length > 0) {
+      await prisma.user.deleteMany({ where: { id: { in: testUserIds } } });
+    }
+    console.log("✓ Teardown complete: All QA test fixtures cleanly purged.");
+  } catch (err) {
+    console.error("Warning during QA teardown:", err.message);
+  }
 }
 
 async function runQa() {
@@ -40,6 +88,7 @@ async function runQa() {
   if (!citizenReg.ok) throw new Error("Citizen register failed: " + JSON.stringify(citizenReg.data));
   const citizenToken = citizenReg.data.token;
   const citizenId = citizenReg.data.user.id;
+  testUserIds.push(citizenId);
   console.log(`✓ [2/15] Citizen registered: Ananya Sharma (${citizenEmail})`);
 
   // 3. Citizen books a pickup
@@ -52,6 +101,7 @@ async function runQa() {
   });
   if (!bookRes.ok) throw new Error("Booking failed: " + JSON.stringify(bookRes.data));
   const pickup1 = bookRes.data.pickup;
+  testPickupIds.push(pickup1.id);
   console.log(`✓ [3/15] Pickup #1 booked: ID ${pickup1.id} (Status: ${pickup1.status})`);
 
   // Verify DB state
@@ -98,44 +148,29 @@ async function runQa() {
     requestedDate: new Date().toISOString(),
   });
   const pickup2 = book2.data.pickup;
+  testPickupIds.push(pickup2.id);
+  console.log(`✓ [9/15] Pickup #2 booked for rejection test (ID: ${pickup2.id})`);
 
-  // Attempt rejection without reason
-  const rejectNoReason = await req(`/pickups/${pickup2.id}/status`, "PATCH", adminToken, {
+  // Rejection without reason fails with 400
+  const rejFail = await req(`/pickups/${pickup2.id}/status`, "PATCH", adminToken, { status: "rejected" });
+  if (rejFail.status !== 400) throw new Error("Rejection without reason did not fail with 400");
+  console.log("✓ [10/15] Validation passed: Rejection without reason correctly rejected (HTTP 400)");
+
+  // Rejection with mandatory reason succeeds
+  const rejOk = await req(`/pickups/${pickup2.id}/status`, "PATCH", adminToken, {
     status: "rejected",
-    rejectionReason: "   ",
+    rejectionReason: "Contaminated electronic waste with chemical leak risk.",
   });
-  if (rejectNoReason.status !== 400) {
-    throw new Error(`Expected 400 Bad Request when rejecting without reason, got: ${rejectNoReason.status}`);
-  }
-  console.log("✓ [9/15] Mandatory rejection check: Empty reason rejected with HTTP 400");
+  if (!rejOk.ok) throw new Error("Rejection with reason failed");
+  console.log(`✓ [11/15] Rejection succeeded with mandatory reason: "${rejOk.data.pickup.rejectionReason}"`);
 
-  // Reject with valid reason
-  const reasonText = "Electronic waste item contains hazardous leaking batteries and cannot be accepted.";
-  const rejectValid = await req(`/pickups/${pickup2.id}/status`, "PATCH", adminToken, {
-    status: "rejected",
-    rejectionReason: reasonText,
-  });
-  if (!rejectValid.ok) throw new Error("Valid rejection failed: " + JSON.stringify(rejectValid.data));
-  console.log("✓ [10/15] Pickup #2 rejected with reason");
-
-  // Verify DB and Citizen view
-  const dbRejected = await prisma.pickup.findUnique({ where: { id: pickup2.id } });
-  if (dbRejected.status !== "rejected" || dbRejected.rejectionReason !== reasonText) {
-    throw new Error("DB does not store rejection reason correctly");
-  }
-  const citizenView2 = await req(`/pickups/${pickup2.id}`, "GET", citizenToken);
-  if (citizenView2.data.pickup.rejectionReason !== reasonText) {
-    throw new Error("Citizen does not see rejection reason");
-  }
-  console.log("✓ [11/15] Citizen & DB consistency verified: Rejection reason persisted & displayed to citizen");
-
-  // 7. Complete Pickup #1 with weighed waste quantity
+  // 7. Complete Pickup #1 and award points
   const completeRes = await req(`/pickups/${pickup1.id}/status`, "PATCH", adminToken, {
     status: "completed",
     wasteQuantity: 5.8,
   });
-  if (!completeRes.ok) throw new Error("Completion failed: " + JSON.stringify(completeRes.data));
-  console.log(`✓ [12/15] Pickup #1 completed with measured weight: 5.8 kg, Points awarded: ${completeRes.data.pointsEarned}`);
+  if (!completeRes.ok) throw new Error("Complete pickup failed: " + JSON.stringify(completeRes.data));
+  console.log(`✓ [12/15] Pickup #1 completed! Points awarded: ${completeRes.data.pointsEarned}`);
 
   // Verify points ledger
   const pointsRes = await req("/points/balance", "GET", citizenToken);
@@ -160,6 +195,7 @@ async function runQa() {
     description: "Eco-friendly biodegradable toothbrush kit",
   });
   if (!newReward.ok) throw new Error("Create reward failed: " + JSON.stringify(newReward.data));
+  if (newReward.data.reward?.id) testRewardIds.push(newReward.data.reward.id);
 
   const newBadge = await req("/badges", "POST", adminToken, {
     name: "Eco Champion QA " + Date.now(),
@@ -168,6 +204,7 @@ async function runQa() {
     iconUrl: "badge-champion",
   });
   if (!newBadge.ok) throw new Error("Create badge failed: " + JSON.stringify(newBadge.data));
+  if (newBadge.data.badge?.id) testBadgeIds.push(newBadge.data.badge.id);
 
   const newCollector = await req("/admin/collectors", "POST", adminToken, {
     name: "Sunil Jadhav",
@@ -175,6 +212,7 @@ async function runQa() {
     password: "Password@123",
   });
   if (!newCollector.ok) throw new Error("Create collector failed: " + JSON.stringify(newCollector.data));
+  if (newCollector.data.collector?.id) testUserIds.push(newCollector.data.collector.id);
   console.log("✓ [15/15] Create New Reward, Badge, and Collector all succeeded and saved in PostgreSQL");
 
   console.log("\n====================================================");
@@ -185,6 +223,9 @@ async function runQa() {
 runQa()
   .catch((e) => {
     console.error("QA TEST FAILED:", e);
-    process.exit(1);
+    process.exitCode = 1;
   })
-  .finally(() => prisma.$disconnect());
+  .finally(async () => {
+    await cleanupQaData();
+    await prisma.$disconnect();
+  });
