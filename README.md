@@ -508,7 +508,7 @@ Start the React Native application using Expo. Scan the QR code with the Expo Go
 
 > **Important Note for Standalone Builds (`app.json`):**
 > When generating standalone native production builds (via EAS Build, APK, or iOS Archive) rather than running in Expo Go:
-> 1. **Location Permissions:** Explicit permission strings must be configured in `mobile-app/app.json` under the `expo-location` plugin (`locationWhenInUsePermission` and `locationAlwaysAndWhenInUsePermission`) so that native iOS (`NSLocationWhenInUseUsageDescription`) and Android manifest entries are properly compiled.
+> 1. **Location Permissions:** Explicit permission strings must be configured in `mobile-app/app.json` under the `expo-location` plugin (`locationWhenInUsePermission` with `isIosBackgroundLocationEnabled: false` since the application operates foreground-only) so that native iOS (`NSLocationWhenInUseUsageDescription`) and Android manifest entries are properly compiled.
 > 2. **Google Maps API Key:** `react-native-maps` on Android requires a valid Google Maps API Key defined in `app.json` under `expo.android.config.googleMaps.apiKey`. (In Expo Go development, default native map providers are used automatically).
 
 ### 4. Admin Dashboard Setup
@@ -715,8 +715,7 @@ Potential future improvements include:
 
 * Push notifications
 * Pickup route optimization
-* Analytics dashboard
-* Waste collection statistics
+* Exportable reports (CSV/PDF audits)
 * Advanced reward mechanisms
 * Automated notifications
 * Cloud deployment

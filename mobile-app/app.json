@@ -33,7 +33,7 @@
         "expo-location",
         {
           "locationWhenInUsePermission": "WasteWise needs your location to pinpoint pickup coordinates and enable live collection vehicle tracking.",
-          "locationAlwaysAndWhenInUsePermission": "WasteWise requires background location access to broadcast collection vehicle telemetry during active routes."
+          "isIosBackgroundLocationEnabled": false
         }
       ],
       "expo-status-bar"
