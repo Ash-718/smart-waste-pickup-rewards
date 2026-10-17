@@ -17,7 +17,7 @@ export function useLiveTracking(pickupId) {
 
   const socketRef = useRef(null);
   const staleTimerRef = useRef(null);
-  const lastLocationTimestampRef = useRef(null);
+  const lastReceivedTimestampRef = useRef(null);
   const latestLocationRef = useRef(null);
   const locationThrottleTimerRef = useRef(null);
   const lastLocationStateUpdateTimeRef = useRef(0);
@@ -62,7 +62,7 @@ export function useLiveTracking(pickupId) {
               recordedAt: t.vehicle.location.recordedAt,
             });
             setIsStale(t.status === "arrived" ? false : t.vehicle.location.isStale || false);
-            lastLocationTimestampRef.current = t.vehicle.location.recordedAt
+            lastReceivedTimestampRef.current = t.vehicle.location.recordedAt
               ? new Date(t.vehicle.location.recordedAt).getTime()
               : Date.now();
           }
@@ -79,6 +79,7 @@ export function useLiveTracking(pickupId) {
   );
 
   // Watch for stale locations (>30s without update while in transit)
+  // Directly references last received socket packet timestamp, independent of throttled React state
   useEffect(() => {
     const checkStale = () => {
       // Once arrived, the vehicle is waiting at the citizen's doorstep; suppress stale warning
@@ -89,9 +90,9 @@ export function useLiveTracking(pickupId) {
 
       if (
         ["assigned", "on_the_way"].includes(status) &&
-        lastLocationTimestampRef.current
+        lastReceivedTimestampRef.current
       ) {
-        const ageSec = (Date.now() - lastLocationTimestampRef.current) / 1000;
+        const ageSec = (Date.now() - lastReceivedTimestampRef.current) / 1000;
         setIsStale(ageSec > 30);
       } else {
         setIsStale(false);
@@ -178,7 +179,7 @@ export function useLiveTracking(pickupId) {
       };
 
       latestLocationRef.current = loc;
-      lastLocationTimestampRef.current = Date.now();
+      lastReceivedTimestampRef.current = Date.now();
       setIsStale(false);
 
       const now = Date.now();

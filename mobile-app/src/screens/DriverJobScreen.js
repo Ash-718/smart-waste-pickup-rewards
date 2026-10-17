@@ -26,7 +26,6 @@ const ARRIVAL_RADIUS_METERS = parseInt(
   10
 );
 
-const DEFAULT_PICKUP_COORDS = Object.freeze({ lat: 19.0544, lng: 72.8402 });
 const DEFAULT_TILE_URL = process.env.EXPO_PUBLIC_TILE_URL || "https://tile.openstreetmap.org/{z}/{x}/{y}.png";
 const FALLBACK_TILE_URL = "https://a.tile.openstreetmap.fr/osmfr/{z}/{x}/{y}.png";
 
@@ -43,16 +42,18 @@ export default function DriverJobScreen({ route, navigation }) {
   const [tileLoading, setTileLoading] = useState(true);
   const [tileError, setTileError] = useState(false);
 
-  // Render counting (Requirement B.1)
+  // Render counting (Gated strictly behind __DEV__)
   const renderCountRef = useRef(0);
   const renderStartTimeRef = useRef(Date.now());
-  renderCountRef.current += 1;
-  const elapsedSec = (Date.now() - renderStartTimeRef.current) / 1000;
-  if (__DEV__ && elapsedSec >= 5) {
-    const rps = (renderCountRef.current / elapsedSec).toFixed(1);
-    console.log(`[DriverJobScreen] Render rate: ${rps} renders/sec (${renderCountRef.current} renders in ${elapsedSec.toFixed(0)}s)`);
-    renderCountRef.current = 0;
-    renderStartTimeRef.current = Date.now();
+  if (typeof __DEV__ !== "undefined" && Boolean(__DEV__)) {
+    renderCountRef.current += 1;
+    const elapsedSec = (Date.now() - renderStartTimeRef.current) / 1000;
+    if (elapsedSec >= 5) {
+      const rps = (renderCountRef.current / elapsedSec).toFixed(1);
+      console.log(`[DriverJobScreen] Render rate: ${rps} renders/sec (${renderCountRef.current} renders in ${elapsedSec.toFixed(0)}s)`);
+      renderCountRef.current = 0;
+      renderStartTimeRef.current = Date.now();
+    }
   }
 
   // Dev demo override for arrival distance check
@@ -89,10 +90,15 @@ export default function DriverJobScreen({ route, navigation }) {
     fetchJob();
   }, [pickupId]);
 
-  // Stable pickup coordinates reference to avoid re-triggering useDriverTracking watcher on every render
+  // If pickup coordinates are missing, do NOT fallback to a hardcoded location
   const pickupCoords = useMemo(() => {
-    return jobData?.pickupCoordinates || DEFAULT_PICKUP_COORDS;
+    if (jobData?.pickupCoordinates?.lat && jobData?.pickupCoordinates?.lng) {
+      return jobData.pickupCoordinates;
+    }
+    return null;
   }, [jobData?.pickupCoordinates]);
+
+  const hasValidPickupCoords = Boolean(pickupCoords?.lat && pickupCoords?.lng);
 
   // 2. Foreground GPS tracking hook
   const {
@@ -236,69 +242,77 @@ export default function DriverJobScreen({ route, navigation }) {
           </Text>
         </View>
 
-        {/* Mini Destination Map */}
-        <View style={styles.mapContainer}>
-          <MapView
-            ref={mapRef}
-            style={styles.map}
-            initialRegion={{
-              latitude: pickupCoords.lat,
-              longitude: pickupCoords.lng,
-              latitudeDelta: 0.015,
-              longitudeDelta: 0.015,
-            }}
-            mapType="none"
-            onMapReady={() => setTileLoading(false)}
-            onError={(e) => {
-              console.warn("[DriverJobScreen] MapView/Tile error:", e?.nativeEvent || e);
-              if (tileUrl !== FALLBACK_TILE_URL) {
-                setTileUrl(FALLBACK_TILE_URL);
-                setTileError(true);
-              }
-            }}
-            showsUserLocation={true}
-            showsCompass={false}
-          >
-            <UrlTile
-              urlTemplate={tileUrl}
-              tileSize={256}
-              maximumZ={18}
-              flipY={false}
-              zIndex={-1}
-            />
-            <Marker
-              coordinate={{ latitude: pickupCoords.lat, longitude: pickupCoords.lng }}
-              title="Customer Pickup Spot"
-              description={jobData?.address}
-              tracksViewChanges={false}
+        {/* Mini Destination Map or Missing Coords Warning */}
+        {hasValidPickupCoords ? (
+          <View style={styles.mapContainer}>
+            <MapView
+              ref={mapRef}
+              style={styles.map}
+              initialRegion={{
+                latitude: pickupCoords.lat,
+                longitude: pickupCoords.lng,
+                latitudeDelta: 0.015,
+                longitudeDelta: 0.015,
+              }}
+              mapType="none"
+              onMapReady={() => setTileLoading(false)}
+              onError={(e) => {
+                console.warn("[DriverJobScreen] MapView/Tile error:", e?.nativeEvent || e);
+                if (tileUrl !== FALLBACK_TILE_URL) {
+                  setTileUrl(FALLBACK_TILE_URL);
+                  setTileError(true);
+                }
+              }}
+              showsUserLocation={true}
+              showsCompass={false}
             >
-              <View style={styles.pinWrapper}>
-                <View style={styles.pinCircle}>
-                  <View style={styles.pinDot} />
+              <UrlTile
+                urlTemplate={tileUrl}
+                tileSize={256}
+                maximumZ={18}
+                flipY={false}
+                zIndex={-1}
+              />
+              <Marker
+                coordinate={{ latitude: pickupCoords.lat, longitude: pickupCoords.lng }}
+                title="Customer Pickup Spot"
+                description={jobData?.address}
+                tracksViewChanges={false}
+              >
+                <View style={styles.pinWrapper}>
+                  <View style={styles.pinCircle}>
+                    <View style={styles.pinDot} />
+                  </View>
+                  <View style={styles.pinTip} />
                 </View>
-                <View style={styles.pinTip} />
+              </Marker>
+            </MapView>
+            {tileLoading && (
+              <View style={styles.tileLoadingOverlay} pointerEvents="none">
+                <ActivityIndicator size="small" color={colors.brand700} />
               </View>
-            </Marker>
-          </MapView>
-          {tileLoading && (
-            <View style={styles.tileLoadingOverlay} pointerEvents="none">
-              <ActivityIndicator size="small" color={colors.brand700} />
+            )}
+            {tileError && (
+              <View style={styles.tileErrorBanner} pointerEvents="none">
+                <Text style={styles.tileErrorText}>Using backup map tiles</Text>
+              </View>
+            )}
+            <View style={styles.attributionPill} pointerEvents="none">
+              <Text style={styles.attributionPillText}>© OpenStreetMap</Text>
             </View>
-          )}
-          {tileError && (
-            <View style={styles.tileErrorBanner} pointerEvents="none">
-              <Text style={styles.tileErrorText}>Using backup map tiles</Text>
+            <View style={styles.mapOverlayPill}>
+              <Text style={styles.mapOverlayText}>
+                {distanceToPickup !== null ? `Distance: ~${distanceToPickup}m away` : "Calculating GPS distance..."}
+              </Text>
             </View>
-          )}
-          <View style={styles.attributionPill} pointerEvents="none">
-            <Text style={styles.attributionPillText}>© OpenStreetMap</Text>
           </View>
-          <View style={styles.mapOverlayPill}>
-            <Text style={styles.mapOverlayText}>
-              {distanceToPickup !== null ? `Distance: ~${distanceToPickup}m away` : "Calculating GPS distance..."}
-            </Text>
+        ) : (
+          <View style={styles.missingCoordsContainer}>
+            <Ionicons name="location-outline" size={32} color={colors.amber700} style={{ marginBottom: 6 }} />
+            <Text style={styles.missingCoordsTitle}>Pickup location missing. Contact admin.</Text>
+            <Text style={styles.missingCoordsSub}>GPS coordinates have not been assigned to this pickup request.</Text>
           </View>
-        </View>
+        )}
 
         {/* Customer & Address Details Card */}
         <View style={styles.detailsCard}>
@@ -352,11 +366,22 @@ export default function DriverJobScreen({ route, navigation }) {
             BIG HIGH-CONTRAST ACTION BUTTONS
         ======================================================== */}
         <View style={styles.actionContainer}>
+          {!hasValidPickupCoords && (
+            <View style={styles.missingCoordsBanner}>
+              <Ionicons name="alert-circle" size={18} color={colors.amber800} style={{ marginRight: 6 }} />
+              <Text style={styles.missingCoordsBannerText}>Pickup location missing. Contact admin.</Text>
+            </View>
+          )}
+
           {status === "assigned" && (
             <TouchableOpacity
-              style={[styles.bigButton, styles.btnStart, submitting && styles.btnDisabled]}
+              style={[
+                styles.bigButton,
+                styles.btnStart,
+                (submitting || !hasValidPickupCoords) && styles.btnDisabled,
+              ]}
               onPress={handleStartTrip}
-              disabled={submitting}
+              disabled={submitting || !hasValidPickupCoords}
               activeOpacity={0.8}
             >
               {submitting ? (
@@ -372,9 +397,13 @@ export default function DriverJobScreen({ route, navigation }) {
 
           {status === "on_the_way" && (
             <TouchableOpacity
-              style={[styles.bigButton, styles.btnArrived, submitting && styles.btnDisabled]}
+              style={[
+                styles.bigButton,
+                styles.btnArrived,
+                (submitting || !hasValidPickupCoords) && styles.btnDisabled,
+              ]}
               onPress={handleArrived}
-              disabled={submitting}
+              disabled={submitting || !hasValidPickupCoords}
               activeOpacity={0.8}
             >
               {submitting ? (
@@ -873,5 +902,46 @@ const styles = StyleSheet.create({
     fontSize: 10,
     color: colors.amber800,
     fontWeight: "600",
+  },
+  missingCoordsContainer: {
+    height: 180,
+    borderRadius: 16,
+    borderWidth: 1.5,
+    borderColor: colors.amber300,
+    backgroundColor: colors.amber50,
+    borderStyle: "dashed",
+    justifyContent: "center",
+    alignItems: "center",
+    paddingHorizontal: 20,
+    marginVertical: 6,
+  },
+  missingCoordsTitle: {
+    fontSize: 14,
+    fontWeight: "700",
+    color: colors.amber900,
+    textAlign: "center",
+  },
+  missingCoordsSub: {
+    fontSize: 12,
+    color: colors.amber800,
+    textAlign: "center",
+    marginTop: 4,
+  },
+  missingCoordsBanner: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: colors.amber100,
+    borderWidth: 1,
+    borderColor: colors.amber500,
+    borderRadius: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    marginBottom: 12,
+  },
+  missingCoordsBannerText: {
+    fontSize: 13,
+    fontWeight: "700",
+    color: colors.amber900,
+    flex: 1,
   },
 });

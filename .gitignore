@@ -40,3 +40,7 @@ Thumbs.db
 !.vscode/extensions.json
 *.suo
 *.sw?
+
+# Uploaded files
+backend/uploads/
+uploads/

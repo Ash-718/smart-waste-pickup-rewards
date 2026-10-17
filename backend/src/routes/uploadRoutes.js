@@ -12,14 +12,21 @@ if (!fs.existsSync(uploadsDir)) {
   fs.mkdirSync(uploadsDir, { recursive: true });
 }
 
-// Multer diskStorage saves files directly to backend/uploads
+const ALLOWED_MIME_TYPES = new Set(["image/jpeg", "image/png", "image/webp"]);
+const MIME_TO_EXT = {
+  "image/jpeg": ".jpg",
+  "image/png": ".png",
+  "image/webp": ".webp",
+};
+
+// Multer diskStorage saves files directly to backend/uploads with random server-generated names
 const storage = multer.diskStorage({
   destination: (req, file, cb) => {
     cb(null, uploadsDir);
   },
   filename: (req, file, cb) => {
-    const ext = path.extname(file.originalname) || ".jpg";
-    const filename = `pickup_${Date.now()}_${crypto.randomBytes(4).toString("hex")}${ext}`;
+    const ext = MIME_TO_EXT[file.mimetype.toLowerCase()] || ".jpg";
+    const filename = `pickup_${Date.now()}_${crypto.randomBytes(8).toString("hex")}${ext}`;
     cb(null, filename);
   },
 });
@@ -28,8 +35,12 @@ const upload = multer({
   storage,
   limits: { fileSize: 10 * 1024 * 1024 }, // 10MB limit
   fileFilter: (req, file, cb) => {
-    if (!file.mimetype || !file.mimetype.startsWith("image/")) {
-      return cb(new HttpError(400, "Only image uploads are allowed"));
+    const mime = (file.mimetype || "").toLowerCase();
+    const rawExt = path.extname(file.originalname || "").toLowerCase();
+    const validExts = new Set([".jpg", ".jpeg", ".png", ".webp"]);
+
+    if (!ALLOWED_MIME_TYPES.has(mime) || !validExts.has(rawExt)) {
+      return cb(new HttpError(400, "Only JPEG, PNG, and WebP image uploads are allowed"));
     }
     cb(null, true);
   },

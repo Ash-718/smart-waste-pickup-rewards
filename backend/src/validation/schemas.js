@@ -33,6 +33,34 @@ const loginSchema = z
     path: ["email"],
   });
 
+const photoUrlValidator = z
+  .string()
+  .trim()
+  .refine(
+    (val) => {
+      if (!val) return true;
+      if (val.startsWith("/uploads/")) {
+        // Must be a clean relative upload path without path traversal or protocol injection
+        return (
+          !val.includes("..") &&
+          !val.includes(":") &&
+          !val.toLowerCase().startsWith("/uploads/javascript") &&
+          !val.toLowerCase().startsWith("/uploads/data")
+        );
+      }
+      try {
+        const parsed = new URL(val);
+        return parsed.protocol === "https:";
+      } catch {
+        return false;
+      }
+    },
+    {
+      message: 'photoUrl must start with "/uploads/" or be a valid https:// URL',
+    }
+  )
+  .optional();
+
 const createPickupSchema = z.object({
   wasteType: z.enum(wasteTypeValues),
   quantityBand: z.enum(quantityBandValues),
@@ -40,7 +68,7 @@ const createPickupSchema = z.object({
   address: z.string().trim().min(1, "Address is required"),
   slotPeriod: z.enum(slotPeriodValues),
   requestedDate: z.coerce.date(),
-  photoUrl: z.string().trim().min(1).optional(),
+  photoUrl: photoUrlValidator,
   latitude: z.number().min(-90).max(90).nullable().optional(),
   longitude: z.number().min(-180).max(180).nullable().optional(),
 });

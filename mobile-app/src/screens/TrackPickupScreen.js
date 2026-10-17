@@ -45,16 +45,18 @@ export default function TrackPickupScreen({ route, navigation }) {
   const [tileLoading, setTileLoading] = useState(true);
   const [tileError, setTileError] = useState(false);
 
-  // Render counting (Requirement B.1)
+  // Render counting (Gated strictly behind __DEV__)
   const renderCountRef = useRef(0);
   const renderStartTimeRef = useRef(Date.now());
-  renderCountRef.current += 1;
-  const elapsedSec = (Date.now() - renderStartTimeRef.current) / 1000;
-  if (__DEV__ && elapsedSec >= 5) {
-    const rps = (renderCountRef.current / elapsedSec).toFixed(1);
-    console.log(`[TrackPickupScreen] Render rate: ${rps} renders/sec (${renderCountRef.current} renders in ${elapsedSec.toFixed(0)}s)`);
-    renderCountRef.current = 0;
-    renderStartTimeRef.current = Date.now();
+  if (typeof __DEV__ !== "undefined" && Boolean(__DEV__)) {
+    renderCountRef.current += 1;
+    const elapsedSec = (Date.now() - renderStartTimeRef.current) / 1000;
+    if (elapsedSec >= 5) {
+      const rps = (renderCountRef.current / elapsedSec).toFixed(1);
+      console.log(`[TrackPickupScreen] Render rate: ${rps} renders/sec (${renderCountRef.current} renders in ${elapsedSec.toFixed(0)}s)`);
+      renderCountRef.current = 0;
+      renderStartTimeRef.current = Date.now();
+    }
   }
 
   const {
