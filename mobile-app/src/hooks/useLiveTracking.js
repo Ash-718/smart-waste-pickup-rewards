@@ -18,6 +18,9 @@ export function useLiveTracking(pickupId) {
   const socketRef = useRef(null);
   const staleTimerRef = useRef(null);
   const lastLocationTimestampRef = useRef(null);
+  const latestLocationRef = useRef(null);
+  const locationThrottleTimerRef = useRef(null);
+  const lastLocationStateUpdateTimeRef = useRef(0);
 
   // Trigger haptic feedback safely
   const triggerHaptic = useCallback(async (type = "impact") => {
@@ -40,6 +43,7 @@ export function useLiveTracking(pickupId) {
   const fetchTracking = useCallback(
     async (isSilent = false) => {
       if (!pickupId) return;
+      console.log(`[useLiveTracking] GET /api/pickups/${pickupId}/tracking (silent: ${isSilent})`);
       if (!isSilent) setLoading(true);
       try {
         const res = await getPickupTracking(pickupId);
@@ -161,18 +165,37 @@ export function useLiveTracking(pickupId) {
       setConnectionState("reconnecting");
     });
 
-    // Handle live vehicle movement
+    // Handle live vehicle movement with 2-second state throttling
     socket.on("vehicle:location", (data) => {
-      if (data && data.lat && data.lng) {
-        setVehicleLocation({
-          lat: data.lat,
-          lng: data.lng,
-          speed: data.speed || 0,
-          heading: data.heading || 0,
-          recordedAt: data.recordedAt || new Date().toISOString(),
-        });
-        lastLocationTimestampRef.current = Date.now();
-        setIsStale(false);
+      if (!data || !data.lat || !data.lng) return;
+
+      const loc = {
+        lat: data.lat,
+        lng: data.lng,
+        speed: data.speed || 0,
+        heading: data.heading || 0,
+        recordedAt: data.recordedAt || new Date().toISOString(),
+      };
+
+      latestLocationRef.current = loc;
+      lastLocationTimestampRef.current = Date.now();
+      setIsStale(false);
+
+      const now = Date.now();
+      const timeSinceLastUpdate = now - lastLocationStateUpdateTimeRef.current;
+
+      if (timeSinceLastUpdate >= 2000) {
+        lastLocationStateUpdateTimeRef.current = now;
+        setVehicleLocation(loc);
+      } else if (!locationThrottleTimerRef.current) {
+        // Schedule trailing update so latest location is always reflected
+        locationThrottleTimerRef.current = setTimeout(() => {
+          locationThrottleTimerRef.current = null;
+          lastLocationStateUpdateTimeRef.current = Date.now();
+          if (latestLocationRef.current) {
+            setVehicleLocation(latestLocationRef.current);
+          }
+        }, 2000 - timeSinceLastUpdate);
       }
     });
 
@@ -191,6 +214,10 @@ export function useLiveTracking(pickupId) {
     });
 
     return () => {
+      if (locationThrottleTimerRef.current) {
+        clearTimeout(locationThrottleTimerRef.current);
+        locationThrottleTimerRef.current = null;
+      }
       if (socketRef.current) {
         socketRef.current.emit("leave:pickup", { pickupId });
         socketRef.current.off("connect");
@@ -209,6 +236,7 @@ export function useLiveTracking(pickupId) {
   return {
     trackingData,
     vehicleLocation,
+    latestLocationRef,
     status,
     navigation,
     loading,

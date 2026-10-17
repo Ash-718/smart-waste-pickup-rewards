@@ -1,5 +1,5 @@
-import { useState, useEffect, useRef } from "react";
-import { StyleSheet, View, Text, Animated } from "react-native";
+import React, { useState, useEffect, useRef } from "react";
+import { StyleSheet, View, Text, Animated, Platform } from "react-native";
 import { Marker } from "react-native-maps";
 import { colors } from "../theme/colors";
 
@@ -7,9 +7,12 @@ import { colors } from "../theme/colors";
  * Custom animated vehicle marker.
  * Built with 100% pure Views (ZERO icon font dependency) so it renders immediately and reliably on all devices.
  * Smoothly interpolates coordinates and heading rotation between telemetry updates to avoid jumps.
+ * On Android, uses native markerRef.animateMarkerToCoordinate for high-performance fluid tracking.
  */
-export default function VehicleMarker({ location, registrationNo }) {
+function VehicleMarker({ location, registrationNo }) {
   const [tracksViewChanges, setTracksViewChanges] = useState(true);
+  const markerRef = useRef(null);
+  const prevCoordRef = useRef(location ? { lat: location.lat, lng: location.lng } : null);
 
   if (!location || typeof location.lat !== "number" || typeof location.lng !== "number") {
     return null;
@@ -17,7 +20,17 @@ export default function VehicleMarker({ location, registrationNo }) {
 
   const { lat, lng, heading = 0 } = location;
 
-  // Coordinate animation ref
+  // Animate coordinate smoothly on Android using native driver
+  useEffect(() => {
+    if (Platform.OS === "android" && markerRef.current?.animateMarkerToCoordinate) {
+      if (!prevCoordRef.current || prevCoordRef.current.lat !== lat || prevCoordRef.current.lng !== lng) {
+        prevCoordRef.current = { lat, lng };
+        markerRef.current.animateMarkerToCoordinate({ latitude: lat, longitude: lng }, 2000);
+      }
+    }
+  }, [lat, lng]);
+
+  // Coordinate animation ref for JS-driven rotation/fallback
   const animatedLat = useRef(new Animated.Value(lat)).current;
   const animatedLng = useRef(new Animated.Value(lng)).current;
   const animatedHeading = useRef(new Animated.Value(heading)).current;
@@ -32,16 +45,16 @@ export default function VehicleMarker({ location, registrationNo }) {
   }, [lat, lng, heading]);
 
   useEffect(() => {
-    // Smoothly animate towards new coordinates over 2.5s (smooth 60fps interpolation)
+    // Smoothly animate towards new heading and coordinates
     Animated.parallel([
       Animated.timing(animatedLat, {
         toValue: lat,
-        duration: 2500,
+        duration: 2000,
         useNativeDriver: false,
       }),
       Animated.timing(animatedLng, {
         toValue: lng,
-        duration: 2500,
+        duration: 2000,
         useNativeDriver: false,
       }),
       Animated.timing(animatedHeading, {
@@ -59,6 +72,7 @@ export default function VehicleMarker({ location, registrationNo }) {
 
   return (
     <Marker
+      ref={markerRef}
       coordinate={{ latitude: lat, longitude: lng }}
       anchor={{ x: 0.5, y: 0.5 }}
       flat={true}
@@ -200,3 +214,5 @@ const styles = StyleSheet.create({
     letterSpacing: 0.5,
   },
 });
+
+export default React.memo(VehicleMarker);

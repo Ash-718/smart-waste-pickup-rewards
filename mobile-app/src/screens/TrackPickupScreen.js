@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useMemo, useCallback } from "react";
 import {
   StyleSheet,
   View,
@@ -17,10 +17,45 @@ import TrackingBottomSheet from "../components/TrackingBottomSheet";
 import { colors } from "../theme/colors";
 import { apiFetch } from "../lib/apiClient";
 
+const DEFAULT_TILE_URL = process.env.EXPO_PUBLIC_TILE_URL || "https://tile.openstreetmap.org/{z}/{x}/{y}.png";
+const FALLBACK_TILE_URL = "https://a.tile.openstreetmap.fr/osmfr/{z}/{x}/{y}.png";
+
+// Downsamples route geometry polyline to max 300 points to prevent native Android map hanging
+function simplifyRouteCoordinates(coords, maxPoints = 300) {
+  if (!coords || coords.length <= maxPoints) return coords || [];
+  const step = Math.ceil(coords.length / maxPoints);
+  const simplified = [];
+  for (let i = 0; i < coords.length; i += step) {
+    simplified.push(coords[i]);
+  }
+  const last = coords[coords.length - 1];
+  if (simplified[simplified.length - 1] !== last) {
+    simplified.push(last);
+  }
+  return simplified;
+}
+
 export default function TrackPickupScreen({ route, navigation }) {
   const { pickupId } = route.params || {};
   const mapRef = useRef(null);
   const [mapReady, setMapReady] = useState(false);
+
+  // UrlTile states (tileSize=256, maximumZ=18, fallback URL, loading & error states)
+  const [tileUrl, setTileUrl] = useState(DEFAULT_TILE_URL);
+  const [tileLoading, setTileLoading] = useState(true);
+  const [tileError, setTileError] = useState(false);
+
+  // Render counting (Requirement B.1)
+  const renderCountRef = useRef(0);
+  const renderStartTimeRef = useRef(Date.now());
+  renderCountRef.current += 1;
+  const elapsedSec = (Date.now() - renderStartTimeRef.current) / 1000;
+  if (__DEV__ && elapsedSec >= 5) {
+    const rps = (renderCountRef.current / elapsedSec).toFixed(1);
+    console.log(`[TrackPickupScreen] Render rate: ${rps} renders/sec (${renderCountRef.current} renders in ${elapsedSec.toFixed(0)}s)`);
+    renderCountRef.current = 0;
+    renderStartTimeRef.current = Date.now();
+  }
 
   const {
     trackingData,
@@ -34,13 +69,14 @@ export default function TrackPickupScreen({ route, navigation }) {
     refetch,
   } = useLiveTracking(pickupId);
 
-  const [hasRecentered, setHasRecentered] = useState(false);
+  // Ref tracking initial fit to guarantee fitToCoordinates is called ONCE on load, never on recurring updates
+  const hasFittedInitialRef = useRef(false);
 
   // Pickup destination coordinates (null if not pinned)
   const pickupCoords = trackingData?.pickupCoordinates || null;
 
   // Fit map camera to show both vehicle and destination
-  const recenterMap = () => {
+  const recenterMap = useCallback(() => {
     if (!mapRef.current) return;
 
     const coordinates = [];
@@ -73,24 +109,76 @@ export default function TrackPickupScreen({ route, navigation }) {
         animated: true,
       });
     }
-  };
+  }, [vehicleLocation?.lat, vehicleLocation?.lng, pickupCoords?.lat, pickupCoords?.lng]);
 
-  // Initial recenter once tracking data arrives
+  // Initial fit once tracking data arrives (once on load only)
   useEffect(() => {
-    if (!hasRecentered && (vehicleLocation?.lat || pickupCoords?.lat)) {
+    if (!hasFittedInitialRef.current && (vehicleLocation?.lat || pickupCoords?.lat)) {
+      hasFittedInitialRef.current = true;
       recenterMap();
-      setHasRecentered(true);
     }
-  }, [vehicleLocation?.lat, pickupCoords?.lat, hasRecentered]);
+  }, [vehicleLocation?.lat, pickupCoords?.lat, recenterMap]);
 
-  // Decode OSRM route geometry polyline coordinates
-  const polylineCoords = (routeNav?.geometry?.coordinates || []).map((coord) => ({
-    latitude: coord[1],
-    longitude: coord[0],
-  }));
+  // Decode and downsample OSRM route geometry to under 300 points
+  const polylineCoords = useMemo(() => {
+    const raw = routeNav?.geometry?.coordinates;
+    if (!raw || !Array.isArray(raw) || raw.length === 0) return [];
+    const formatted = raw.map((coord) => ({
+      latitude: coord[1],
+      longitude: coord[0],
+    }));
+    return simplifyRouteCoordinates(formatted, 300);
+  }, [routeNav?.geometry?.coordinates]);
+
+  // Memoized polyline component
+  const memoizedPolyline = useMemo(() => {
+    if (polylineCoords.length === 0) return null;
+    return (
+      <Polyline
+        coordinates={polylineCoords}
+        strokeColor={colors.brand600}
+        strokeWidth={4}
+        lineDashPattern={status === "assigned" ? [6, 4] : null}
+      />
+    );
+  }, [polylineCoords, status]);
+
+  // Memoized destination marker
+  const memoizedDestinationMarker = useMemo(() => {
+    if (!pickupCoords?.lat || !pickupCoords?.lng) return null;
+    return (
+      <Marker
+        coordinate={{
+          latitude: pickupCoords.lat,
+          longitude: pickupCoords.lng,
+        }}
+        title="Pickup Location"
+        description={trackingData?.address}
+        tracksViewChanges={false}
+      >
+        <View style={styles.pickupPinContainer}>
+          <View style={styles.pickupPinCircle}>
+            <View style={styles.pickupPinInnerDot} />
+          </View>
+          <View style={styles.pickupPinTriangle} />
+        </View>
+      </Marker>
+    );
+  }, [pickupCoords?.lat, pickupCoords?.lng, trackingData?.address]);
+
+  // Memoized vehicle marker
+  const memoizedVehicleMarker = useMemo(() => {
+    if (!vehicleLocation?.lat || !vehicleLocation?.lng) return null;
+    return (
+      <VehicleMarker
+        location={vehicleLocation}
+        registrationNo={trackingData?.vehicle?.registrationNo}
+      />
+    );
+  }, [vehicleLocation, trackingData?.vehicle?.registrationNo]);
 
   // Handle Cancel Pickup
-  const handleCancelPickup = () => {
+  const handleCancelPickup = useCallback(() => {
     Alert.alert(
       "Cancel Pickup",
       "Are you sure you want to cancel this pickup request?",
@@ -115,7 +203,7 @@ export default function TrackPickupScreen({ route, navigation }) {
         },
       ]
     );
-  };
+  }, [pickupId, navigation]);
 
   if (loading && !trackingData) {
     return (
@@ -173,58 +261,53 @@ export default function TrackPickupScreen({ route, navigation }) {
         style={styles.map}
         initialRegion={initialRegion}
         mapType="none"
-        onMapReady={() => setMapReady(true)}
-        onError={(e) => console.warn("[TrackPickup] MapView error:", e?.nativeEvent || e)}
+        onMapReady={() => {
+          setMapReady(true);
+          setTileLoading(false);
+        }}
+        onError={(e) => {
+          console.warn("[TrackPickup] MapView/Tile error:", e?.nativeEvent || e);
+          if (tileUrl !== FALLBACK_TILE_URL) {
+            setTileUrl(FALLBACK_TILE_URL);
+            setTileError(true);
+          }
+        }}
         showsUserLocation={false}
         showsCompass={false}
         showsTraffic={false}
       >
         {/* OpenStreetMap Raster Tile Layer (Zero Google API key required) */}
         <UrlTile
-          urlTemplate={process.env.EXPO_PUBLIC_TILE_URL || "https://tile.openstreetmap.org/{z}/{x}/{y}.png"}
-          maximumZ={19}
+          urlTemplate={tileUrl}
+          tileSize={256}
+          maximumZ={18}
           flipY={false}
           zIndex={-1}
         />
 
-        {/* Route Polyline in Brand Green */}
-        {polylineCoords.length > 0 && (
-          <Polyline
-            coordinates={polylineCoords}
-            strokeColor={colors.brand600}
-            strokeWidth={4}
-            lineDashPattern={status === "assigned" ? [6, 4] : null}
-          />
-        )}
+        {/* Route Polyline in Brand Green (Memoized, simplified to <300 points) */}
+        {memoizedPolyline}
 
-        {/* Pickup Destination Pin - 100% Pure View Marker (Zero Icon Font Dependency) */}
-        {pickupCoords?.lat && (
-          <Marker
-            coordinate={{
-              latitude: pickupCoords.lat,
-              longitude: pickupCoords.lng,
-            }}
-            title="Pickup Location"
-            description={trackingData?.address}
-            tracksViewChanges={false}
-          >
-            <View style={styles.pickupPinContainer}>
-              <View style={styles.pickupPinCircle}>
-                <View style={styles.pickupPinInnerDot} />
-              </View>
-              <View style={styles.pickupPinTriangle} />
-            </View>
-          </Marker>
-        )}
+        {/* Pickup Destination Pin - Memoized Pure View Marker */}
+        {memoizedDestinationMarker}
 
-        {/* Animated Moving Vehicle Marker (Pure View Marker) */}
-        {vehicleLocation?.lat && (
-          <VehicleMarker
-            location={vehicleLocation}
-            registrationNo={trackingData?.vehicle?.registrationNo}
-          />
-        )}
+        {/* Animated Moving Vehicle Marker - Memoized Pure View Marker */}
+        {memoizedVehicleMarker}
       </MapView>
+
+      {/* Map Tile Loading Indicator */}
+      {tileLoading && (
+        <View style={styles.tileLoadingOverlay} pointerEvents="none">
+          <ActivityIndicator size="small" color={colors.brand700} />
+        </View>
+      )}
+
+      {/* Map Tile Fallback Notice Banner */}
+      {tileError && (
+        <View style={styles.tileErrorBanner} pointerEvents="none">
+          <Text style={styles.tileErrorText}>Using backup map tiles</Text>
+        </View>
+      )}
 
       {/* Map Attribution Text */}
       <View style={styles.attributionContainer} pointerEvents="none">
@@ -490,5 +573,29 @@ const styles = StyleSheet.create({
     color: colors.white,
     fontWeight: "700",
     fontSize: 14,
+  },
+  tileLoadingOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: "rgba(240, 244, 248, 0.6)",
+    justifyContent: "center",
+    alignItems: "center",
+    zIndex: 1,
+  },
+  tileErrorBanner: {
+    position: "absolute",
+    top: 70,
+    alignSelf: "center",
+    backgroundColor: colors.amber100,
+    borderColor: colors.amber600,
+    borderWidth: 0.5,
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 4,
+    zIndex: 10,
+  },
+  tileErrorText: {
+    fontSize: 11,
+    color: colors.amber800,
+    fontWeight: "600",
   },
 });

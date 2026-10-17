@@ -1,4 +1,4 @@
-import { useState, useRef } from "react";
+import React, { useState, useRef } from "react";
 import { StyleSheet, View, Text, TouchableOpacity, Linking, Animated, PanResponder, ScrollView, Platform } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { colors } from "../theme/colors";
@@ -10,7 +10,7 @@ const SNAP_POINTS = {
   full: 580,
 };
 
-export default function TrackingBottomSheet({
+function TrackingBottomSheet({
   trackingData,
   status,
   navigation,
@@ -458,3 +458,5 @@ const styles = StyleSheet.create({
     fontSize: 14,
   },
 });
+
+export default React.memo(TrackingBottomSheet);

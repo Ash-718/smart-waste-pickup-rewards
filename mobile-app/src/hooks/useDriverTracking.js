@@ -268,6 +268,20 @@ export function useDriverTracking(status, pickupCoords) {
       }
     }
 
+    const pickupLat = pickupCoords?.lat;
+    const pickupLng = pickupCoords?.lng;
+
+    // Calculate distance to destination
+    if (pickupLat && pickupLng && lastKnownCoordsRef.current) {
+      const dist = calculateDistanceMeters(
+        lastKnownCoordsRef.current.lat,
+        lastKnownCoordsRef.current.lng,
+        pickupLat,
+        pickupLng
+      );
+      setDistanceToPickup(dist);
+    }
+
     startWatching();
 
     return () => {
@@ -279,7 +293,7 @@ export function useDriverTracking(status, pickupCoords) {
       }
       setIsSharing(false);
     };
-  }, [isTripActive, permissionGranted, pickupCoords]);
+  }, [isTripActive, permissionGranted, pickupCoords?.lat, pickupCoords?.lng]);
 
   // 4. Heartbeat Effect: Resend location every 10s if vehicle is stationary/stopped
   useEffect(() => {

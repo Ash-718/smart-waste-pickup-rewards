@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
 import {
   StyleSheet,
   View,
@@ -26,6 +26,10 @@ const ARRIVAL_RADIUS_METERS = parseInt(
   10
 );
 
+const DEFAULT_PICKUP_COORDS = Object.freeze({ lat: 19.0544, lng: 72.8402 });
+const DEFAULT_TILE_URL = process.env.EXPO_PUBLIC_TILE_URL || "https://tile.openstreetmap.org/{z}/{x}/{y}.png";
+const FALLBACK_TILE_URL = "https://a.tile.openstreetmap.fr/osmfr/{z}/{x}/{y}.png";
+
 export default function DriverJobScreen({ route, navigation }) {
   const { pickupId } = route.params || {};
   const [jobData, setJobData] = useState(null);
@@ -33,6 +37,23 @@ export default function DriverJobScreen({ route, navigation }) {
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [apiError, setApiError] = useState(null);
+
+  // UrlTile states (tileSize=256, maximumZ=18, fallback tile URL, loading & error state)
+  const [tileUrl, setTileUrl] = useState(DEFAULT_TILE_URL);
+  const [tileLoading, setTileLoading] = useState(true);
+  const [tileError, setTileError] = useState(false);
+
+  // Render counting (Requirement B.1)
+  const renderCountRef = useRef(0);
+  const renderStartTimeRef = useRef(Date.now());
+  renderCountRef.current += 1;
+  const elapsedSec = (Date.now() - renderStartTimeRef.current) / 1000;
+  if (__DEV__ && elapsedSec >= 5) {
+    const rps = (renderCountRef.current / elapsedSec).toFixed(1);
+    console.log(`[DriverJobScreen] Render rate: ${rps} renders/sec (${renderCountRef.current} renders in ${elapsedSec.toFixed(0)}s)`);
+    renderCountRef.current = 0;
+    renderStartTimeRef.current = Date.now();
+  }
 
   // Dev demo override for arrival distance check
   const isDemoMode =
@@ -68,7 +89,10 @@ export default function DriverJobScreen({ route, navigation }) {
     fetchJob();
   }, [pickupId]);
 
-  const pickupCoords = jobData?.pickupCoordinates || { lat: 19.0544, lng: 72.8402 };
+  // Stable pickup coordinates reference to avoid re-triggering useDriverTracking watcher on every render
+  const pickupCoords = useMemo(() => {
+    return jobData?.pickupCoordinates || DEFAULT_PICKUP_COORDS;
+  }, [jobData?.pickupCoordinates]);
 
   // 2. Foreground GPS tracking hook
   const {
@@ -224,14 +248,21 @@ export default function DriverJobScreen({ route, navigation }) {
               longitudeDelta: 0.015,
             }}
             mapType="none"
-            onMapReady={() => console.log("[DriverJobScreen] Map ready")}
-            onError={(e) => console.warn("[DriverJobScreen] MapView error:", e?.nativeEvent || e)}
+            onMapReady={() => setTileLoading(false)}
+            onError={(e) => {
+              console.warn("[DriverJobScreen] MapView/Tile error:", e?.nativeEvent || e);
+              if (tileUrl !== FALLBACK_TILE_URL) {
+                setTileUrl(FALLBACK_TILE_URL);
+                setTileError(true);
+              }
+            }}
             showsUserLocation={true}
             showsCompass={false}
           >
             <UrlTile
-              urlTemplate={process.env.EXPO_PUBLIC_TILE_URL || "https://tile.openstreetmap.org/{z}/{x}/{y}.png"}
-              maximumZ={19}
+              urlTemplate={tileUrl}
+              tileSize={256}
+              maximumZ={18}
               flipY={false}
               zIndex={-1}
             />
@@ -249,6 +280,16 @@ export default function DriverJobScreen({ route, navigation }) {
               </View>
             </Marker>
           </MapView>
+          {tileLoading && (
+            <View style={styles.tileLoadingOverlay} pointerEvents="none">
+              <ActivityIndicator size="small" color={colors.brand700} />
+            </View>
+          )}
+          {tileError && (
+            <View style={styles.tileErrorBanner} pointerEvents="none">
+              <Text style={styles.tileErrorText}>Using backup map tiles</Text>
+            </View>
+          )}
           <View style={styles.attributionPill} pointerEvents="none">
             <Text style={styles.attributionPillText}>© OpenStreetMap</Text>
           </View>
@@ -808,5 +849,29 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: "700",
     color: colors.white,
+  },
+  tileLoadingOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: "rgba(240, 244, 248, 0.6)",
+    justifyContent: "center",
+    alignItems: "center",
+    zIndex: 1,
+  },
+  tileErrorBanner: {
+    position: "absolute",
+    top: 6,
+    left: 6,
+    backgroundColor: colors.amber100,
+    borderColor: colors.amber600,
+    borderWidth: 0.5,
+    borderRadius: 6,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    zIndex: 2,
+  },
+  tileErrorText: {
+    fontSize: 10,
+    color: colors.amber800,
+    fontWeight: "600",
   },
 });
