@@ -7,7 +7,7 @@ import StatusBadge from "../components/StatusBadge";
 import EmptyState from "../components/EmptyState";
 import ErrorState from "../components/ErrorState";
 import { TableSkeleton } from "../components/Skeleton";
-import AssignCollectorModal from "../components/AssignCollectorModal";
+import AssignVehicleModal from "../components/AssignVehicleModal";
 import RejectPickupModal from "../components/RejectPickupModal";
 
 const STATUS_FILTERS = ["all", "requested", "assigned", "completed", "rejected", "cancelled"];
@@ -107,7 +107,17 @@ export default function PickupQueuePage() {
                     )}
                   </td>
                   <td className="px-4 py-3 text-neutral-700">
-                    {p.assignedAdmin ? (
+                    {p.assignments?.[0]?.vehicle ? (
+                      <div>
+                        <span className="font-semibold text-emerald-800 flex items-center gap-1">
+                          <span>🚛</span>
+                          <span>{p.assignments[0].vehicle.registrationNo}</span>
+                        </span>
+                        <div className="text-[10px] text-neutral-500">
+                          {p.assignments[0].vehicle.driver?.name || "Driver Unassigned"}
+                        </div>
+                      </div>
+                    ) : p.assignedAdmin ? (
                       <div>
                         <span className="font-medium text-neutral-900">{p.assignedAdmin.name}</span>
                         {p.assignedAt && (
@@ -122,12 +132,17 @@ export default function PickupQueuePage() {
                   </td>
                   <td className="px-4 py-3 text-right">
                     <div className="flex justify-end items-center gap-1.5">
-                      {(p.status === "requested" || p.status === "assigned") && (
+                      {["requested", "assigned", "on_the_way", "arrived"].includes(p.status) && (
                         <button
+                          disabled={p.status === "on_the_way" || p.status === "arrived"}
                           onClick={() => setAssignPickupTarget(p)}
-                          className="rounded-lg border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-xs font-semibold text-emerald-800 hover:bg-emerald-100 transition-colors"
+                          className={`rounded-lg px-2.5 py-1 text-xs font-semibold transition-colors ${
+                            p.status === "on_the_way" || p.status === "arrived"
+                              ? "bg-neutral-100 text-neutral-400 border border-neutral-200 cursor-not-allowed"
+                              : "border border-emerald-200 bg-emerald-50 text-emerald-800 hover:bg-emerald-100"
+                          }`}
                         >
-                          {p.status === "assigned" ? "Reassign" : "Assign"}
+                          {p.assignments?.[0] || p.status === "assigned" ? "Reassign" : "Assign"}
                         </button>
                       )}
 
@@ -157,7 +172,7 @@ export default function PickupQueuePage() {
 
       {/* Modals */}
       {assignPickupTarget && (
-        <AssignCollectorModal
+        <AssignVehicleModal
           pickup={assignPickupTarget}
           onClose={() => setAssignPickupTarget(null)}
           onAssigned={() => refetch()}

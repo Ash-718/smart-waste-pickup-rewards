@@ -4,6 +4,8 @@ import { useAuth } from "../context/AuthContext";
 const NAV_ITEMS = [
   { to: "/dashboard", label: "Dashboard Overview", icon: "📊" },
   { to: "/analytics", label: "Analytics & Trends", icon: "📈" },
+  { to: "/fleet", label: "Live Fleet", icon: "🛰️", adminOnly: true },
+  { to: "/vehicles", label: "Vehicles", icon: "🚛", adminOnly: true },
   { to: "/queue", label: "Pickup Queue", icon: "🚚" },
   { to: "/users", label: "Citizens & Impact", icon: "👥" },
   { to: "/rewards-badges", label: "Rewards & Staff", icon: "🎁" },
@@ -20,6 +22,7 @@ function navLinkClass({ isActive }) {
 
 export default function Layout() {
   const { user, logout } = useAuth();
+  const visibleNavItems = NAV_ITEMS.filter((item) => !item.adminOnly || user?.role === "admin");
 
   return (
     <div className="min-h-screen bg-[#f8faf9] md:flex">
@@ -34,7 +37,7 @@ export default function Layout() {
           </div>
         </div>
         <nav className="space-y-1 p-3">
-          {NAV_ITEMS.map((item) => (
+          {visibleNavItems.map((item) => (
             <NavLink key={item.to} to={item.to} className={navLinkClass}>
               <span className="text-sm">{item.icon}</span>
               <span>{item.label}</span>

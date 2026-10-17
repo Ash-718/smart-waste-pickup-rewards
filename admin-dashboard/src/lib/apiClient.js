@@ -1,4 +1,5 @@
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "http://localhost:4000/api";
+const SOCKET_BASE_URL = import.meta.env.VITE_SOCKET_BASE_URL || "http://localhost:4000";
 
 class ApiError extends Error {
   constructor(message, status, details) {
@@ -12,6 +13,10 @@ let authToken = null;
 
 function setAuthToken(token) {
   authToken = token;
+}
+
+function getAuthToken() {
+  return authToken;
 }
 
 async function apiFetch(path, { method = "GET", body, isFormData = false } = {}) {
@@ -35,4 +40,4 @@ async function apiFetch(path, { method = "GET", body, isFormData = false } = {})
   return data;
 }
 
-export { apiFetch, setAuthToken, ApiError };
+export { apiFetch, setAuthToken, getAuthToken, API_BASE_URL, SOCKET_BASE_URL, ApiError };
