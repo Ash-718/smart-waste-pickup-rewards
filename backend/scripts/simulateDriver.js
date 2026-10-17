@@ -122,11 +122,37 @@ async function simulate() {
     console.log(`ℹ Pickup already in progress (Status: ${targetPickup.status}). Resuming simulation.`);
   }
 
-  // 5. Waypoints Interpolation from Vehicle Location to Pickup Location
-  const startLat = jobsData.vehicle.currentLat || 19.0657;
-  const startLng = jobsData.vehicle.currentLng || 72.8687;
-  const destLat = targetPickup.latitude || 19.0544;
-  const destLng = targetPickup.longitude || 72.8402;
+  // 5. Waypoints Interpolation from Start Location to Pickup Location
+  const destLat = targetPickup.latitude || 16.8413;
+  const destLng = targetPickup.longitude || 74.6016;
+
+  const keepStart = Boolean(args["keep-start"] || args.keepStart);
+
+  // Compute distance between vehicle's current stored location and destination
+  const currLat = jobsData.vehicle?.currentLat;
+  const currLng = jobsData.vehicle?.currentLng;
+  const distKm = (currLat && currLng)
+    ? Math.sqrt(Math.pow((currLat - destLat) * 111, 2) + Math.pow((currLng - destLng) * 111 * Math.cos(destLat * Math.PI / 180), 2))
+    : 999;
+
+  let startLat = currLat;
+  let startLng = currLng;
+
+  if (!startLat || !startLng) {
+    startLat = destLat + 0.0167; // ~1.85 km north
+    startLng = destLng + 0.0134; // ~1.4 km east
+    console.log("ℹ Vehicle had no stored position. Initialized start point ~2.3 km from destination.");
+  } else if (!keepStart && distKm > 4.0) {
+    console.log(
+      `\n📍 [Notice] Moving start point near pickup (~2.3 km away) because vehicle was ${distKm.toFixed(1)} km away.` +
+      `\n   Relocated from (${currLat.toFixed(4)}, ${currLng.toFixed(4)}) to (${(destLat + 0.0167).toFixed(4)}, ${(destLng + 0.0134).toFixed(4)}).` +
+      `\n   Run with '--keep-start' flag to skip this relocation and preserve the original position.\n`
+    );
+    startLat = destLat + 0.0167;
+    startLng = destLng + 0.0134;
+  } else if (keepStart) {
+    console.log(`ℹ '--keep-start' flag active: Preserving current vehicle start coordinates (${startLat.toFixed(4)}, ${startLng.toFixed(4)}), ${distKm.toFixed(1)} km away.`);
+  }
 
   console.log(`\n[5/5] Emitting live vehicle movement every ${INTERVAL_MS / 1000}s along route:`);
   console.log(`  Start: (${startLat.toFixed(4)}, ${startLng.toFixed(4)})`);

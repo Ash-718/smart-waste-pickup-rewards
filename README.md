@@ -570,7 +570,14 @@ EXPO_PUBLIC_DEMO_MODE=false
 
 # Contact email sent in HTTP User-Agent for OpenStreetMap Nominatim geocoding
 EXPO_PUBLIC_CONTACT_EMAIL=your-email@example.com
+
+# OpenStreetMap tile server URL template (public OSM tiles are for demo use only)
+EXPO_PUBLIC_TILE_URL=https://tile.openstreetmap.org/{z}/{x}/{y}.png
 ```
+
+> [!NOTE]
+> **Tile Server Usage Note:** Public OpenStreetMap tile servers (`https://tile.openstreetmap.org/...`) are intended for development, testing, and demo use only. For production deployments, configure `EXPO_PUBLIC_TILE_URL` to point to a commercial provider (e.g. Mapbox, Stadia Maps) or a self-hosted tile server in compliance with the [OpenStreetMap Tile Usage Policy](https://operations.osmfoundation.org/policies/tiles/).
+
 
 ### Admin Dashboard (`admin-dashboard/.env`)
 

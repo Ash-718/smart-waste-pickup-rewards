@@ -4,12 +4,12 @@ import {
   View,
   Text,
   TouchableOpacity,
-  SafeAreaView,
   ActivityIndicator,
   Platform,
   Alert,
 } from "react-native";
-import MapView, { Marker, Polyline } from "react-native-maps";
+import { SafeAreaView } from "react-native-safe-area-context";
+import MapView, { Marker, Polyline, UrlTile } from "react-native-maps";
 import { Ionicons } from "@expo/vector-icons";
 import { useLiveTracking } from "../hooks/useLiveTracking";
 import VehicleMarker from "../components/VehicleMarker";
@@ -20,6 +20,7 @@ import { apiFetch } from "../lib/apiClient";
 export default function TrackPickupScreen({ route, navigation }) {
   const { pickupId } = route.params || {};
   const mapRef = useRef(null);
+  const [mapReady, setMapReady] = useState(false);
 
   const {
     trackingData,
@@ -43,45 +44,58 @@ export default function TrackPickupScreen({ route, navigation }) {
     if (!mapRef.current) return;
 
     const coordinates = [];
-    if (pickupCoords?.lat && pickupCoords?.lng) {
-      coordinates.push({ latitude: pickupCoords.lat, longitude: pickupCoords.lng });
-    }
     if (vehicleLocation?.lat && vehicleLocation?.lng) {
-      coordinates.push({ latitude: vehicleLocation.lat, longitude: vehicleLocation.lng });
+      coordinates.push({
+        latitude: vehicleLocation.lat,
+        longitude: vehicleLocation.lng,
+      });
+    }
+    if (pickupCoords?.lat && pickupCoords?.lng) {
+      coordinates.push({
+        latitude: pickupCoords.lat,
+        longitude: pickupCoords.lng,
+      });
     }
 
-    if (coordinates.length >= 2) {
+    if (coordinates.length === 1) {
+      mapRef.current.animateToRegion(
+        {
+          latitude: coordinates[0].latitude,
+          longitude: coordinates[0].longitude,
+          latitudeDelta: 0.02,
+          longitudeDelta: 0.02,
+        },
+        800
+      );
+    } else if (coordinates.length > 1) {
       mapRef.current.fitToCoordinates(coordinates, {
-        edgePadding: { top: 120, right: 60, bottom: 260, left: 60 },
+        edgePadding: { top: 120, right: 60, bottom: 280, left: 60 },
         animated: true,
-      });
-    } else if (coordinates.length === 1) {
-      mapRef.current.animateToRegion({
-        latitude: coordinates[0].latitude,
-        longitude: coordinates[0].longitude,
-        latitudeDelta: 0.02,
-        longitudeDelta: 0.02,
       });
     }
   };
 
-  // Auto-recenter on initial vehicle or route load
+  // Initial recenter once tracking data arrives
   useEffect(() => {
-    if (!hasRecentered && vehicleLocation?.lat && pickupCoords?.lat) {
-      setTimeout(() => {
-        recenterMap();
-        setHasRecentered(true);
-      }, 500);
+    if (!hasRecentered && (vehicleLocation?.lat || pickupCoords?.lat)) {
+      recenterMap();
+      setHasRecentered(true);
     }
-  }, [hasRecentered, vehicleLocation, pickupCoords]);
+  }, [vehicleLocation?.lat, pickupCoords?.lat, hasRecentered]);
 
-  // Handle cancellation
+  // Decode OSRM route geometry polyline coordinates
+  const polylineCoords = (routeNav?.geometry?.coordinates || []).map((coord) => ({
+    latitude: coord[1],
+    longitude: coord[0],
+  }));
+
+  // Handle Cancel Pickup
   const handleCancelPickup = () => {
     Alert.alert(
       "Cancel Pickup",
       "Are you sure you want to cancel this pickup request?",
       [
-        { text: "No", style: "cancel" },
+        { text: "No, Keep", style: "cancel" },
         {
           text: "Yes, Cancel",
           style: "destructive",
@@ -91,21 +105,17 @@ export default function TrackPickupScreen({ route, navigation }) {
                 method: "PATCH",
                 body: { status: "cancelled" },
               });
-              navigation.goBack();
+              Alert.alert("Pickup Cancelled", "Your pickup has been cancelled.", [
+                { text: "OK", onPress: () => navigation.goBack() },
+              ]);
             } catch (err) {
-              Alert.alert("Cancellation Failed", err.message);
+              Alert.alert("Cancellation Failed", err.message || "Could not cancel pickup");
             }
           },
         },
       ]
     );
   };
-
-  // Convert route polyline geometry from [lat, lng] to react-native-maps format
-  const polylineCoords = (routeNav?.geometry || []).map(([lat, lng]) => ({
-    latitude: lat,
-    longitude: lng,
-  }));
 
   if (loading && !trackingData) {
     return (
@@ -133,8 +143,8 @@ export default function TrackPickupScreen({ route, navigation }) {
   }
 
   const initialRegion = {
-    latitude: vehicleLocation?.lat || pickupCoords?.lat || 19.0544,
-    longitude: vehicleLocation?.lng || pickupCoords?.lng || 72.8402,
+    latitude: vehicleLocation?.lat || pickupCoords?.lat || 16.8413,
+    longitude: vehicleLocation?.lng || pickupCoords?.lng || 74.6016,
     latitudeDelta: 0.03,
     longitudeDelta: 0.03,
   };
@@ -157,15 +167,26 @@ export default function TrackPickupScreen({ route, navigation }) {
 
   return (
     <View style={styles.container}>
-      {/* 1. Full Screen Interactive Map */}
+      {/* 1. Full Screen Interactive Map with OpenStreetMap Tiles */}
       <MapView
         ref={mapRef}
         style={styles.map}
         initialRegion={initialRegion}
+        mapType="none"
+        onMapReady={() => setMapReady(true)}
+        onError={(e) => console.warn("[TrackPickup] MapView error:", e?.nativeEvent || e)}
         showsUserLocation={false}
         showsCompass={false}
         showsTraffic={false}
       >
+        {/* OpenStreetMap Raster Tile Layer (Zero Google API key required) */}
+        <UrlTile
+          urlTemplate={process.env.EXPO_PUBLIC_TILE_URL || "https://tile.openstreetmap.org/{z}/{x}/{y}.png"}
+          maximumZ={19}
+          flipY={false}
+          zIndex={-1}
+        />
+
         {/* Route Polyline in Brand Green */}
         {polylineCoords.length > 0 && (
           <Polyline
@@ -176,7 +197,7 @@ export default function TrackPickupScreen({ route, navigation }) {
           />
         )}
 
-        {/* Pickup Destination Pin */}
+        {/* Pickup Destination Pin - 100% Pure View Marker (Zero Icon Font Dependency) */}
         {pickupCoords?.lat && (
           <Marker
             coordinate={{
@@ -187,13 +208,16 @@ export default function TrackPickupScreen({ route, navigation }) {
             description={trackingData?.address}
             tracksViewChanges={false}
           >
-            <View style={styles.pickupPin}>
-              <Ionicons name="location" size={24} color={colors.red600} />
+            <View style={styles.pickupPinContainer}>
+              <View style={styles.pickupPinCircle}>
+                <View style={styles.pickupPinInnerDot} />
+              </View>
+              <View style={styles.pickupPinTriangle} />
             </View>
           </Marker>
         )}
 
-        {/* Animated Moving Vehicle Marker */}
+        {/* Animated Moving Vehicle Marker (Pure View Marker) */}
         {vehicleLocation?.lat && (
           <VehicleMarker
             location={vehicleLocation}
@@ -202,8 +226,13 @@ export default function TrackPickupScreen({ route, navigation }) {
         )}
       </MapView>
 
+      {/* Map Attribution Text */}
+      <View style={styles.attributionContainer} pointerEvents="none">
+        <Text style={styles.attributionText}>© OpenStreetMap contributors</Text>
+      </View>
+
       {/* 2. Floating Header: Back & Recenter */}
-      <SafeAreaView style={styles.floatingHeader}>
+      <SafeAreaView style={styles.floatingHeader} edges={["top", "left", "right"]}>
         <TouchableOpacity style={styles.circleButton} onPress={() => navigation.goBack()}>
           <Ionicons name="arrow-back" size={20} color={colors.neutral800} />
         </TouchableOpacity>
@@ -266,6 +295,9 @@ const styles = StyleSheet.create({
   },
   map: {
     ...StyleSheet.absoluteFillObject,
+    flex: 1,
+    width: "100%",
+    height: "100%",
   },
   loadingContainer: {
     flex: 1,
@@ -286,10 +318,6 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     padding: 24,
     backgroundColor: colors.background,
-  },
-  errorEmoji: {
-    fontSize: 48,
-    marginBottom: 12,
   },
   errorTitle: {
     fontSize: 18,
@@ -325,7 +353,7 @@ const styles = StyleSheet.create({
   },
   floatingHeader: {
     position: "absolute",
-    top: Platform.OS === "android" ? 36 : 10,
+    top: 10,
     left: 16,
     right: 16,
     flexDirection: "row",
@@ -346,15 +374,9 @@ const styles = StyleSheet.create({
     shadowRadius: 6,
     elevation: 4,
   },
-  backArrow: {
-    fontSize: 20,
-    fontWeight: "bold",
-    color: colors.neutral900,
-  },
-  recenterIcon: {
-    fontSize: 18,
-  },
   statusBanner: {
+    flexDirection: "row",
+    alignItems: "center",
     backgroundColor: colors.neutral900,
     paddingHorizontal: 16,
     paddingVertical: 8,
@@ -371,12 +393,57 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     letterSpacing: 0.3,
   },
-  pickupPin: {
+  pickupPinContainer: {
     alignItems: "center",
     justifyContent: "center",
+    width: 32,
+    height: 38,
   },
-  pinIcon: {
-    fontSize: 32,
+  pickupPinCircle: {
+    width: 26,
+    height: 26,
+    borderRadius: 13,
+    backgroundColor: colors.red600,
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 2,
+    borderColor: colors.white,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 3,
+    elevation: 4,
+  },
+  pickupPinInnerDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: colors.white,
+  },
+  pickupPinTriangle: {
+    width: 0,
+    height: 0,
+    borderLeftWidth: 5,
+    borderRightWidth: 5,
+    borderTopWidth: 8,
+    borderLeftColor: "transparent",
+    borderRightColor: "transparent",
+    borderTopColor: colors.red600,
+    marginTop: -2,
+  },
+  attributionContainer: {
+    position: "absolute",
+    bottom: 240,
+    right: 8,
+    backgroundColor: "rgba(255, 255, 255, 0.75)",
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
+    zIndex: 5,
+  },
+  attributionText: {
+    fontSize: 9,
+    color: colors.neutral600,
   },
   celebrationCard: {
     position: "absolute",
@@ -393,10 +460,6 @@ const styles = StyleSheet.create({
     shadowRadius: 12,
     elevation: 10,
     zIndex: 50,
-  },
-  celebrationEmoji: {
-    fontSize: 40,
-    marginBottom: 6,
   },
   celebrationTitle: {
     fontSize: 18,

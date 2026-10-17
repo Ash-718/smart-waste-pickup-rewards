@@ -47,17 +47,14 @@ export default function BookPickupScreen({ navigation }) {
     },
   });
 
-  async function processSelectedAsset(asset) {
+  const [selectedAsset, setSelectedAsset] = useState(null);
+  const [isUploadingPhoto, setIsUploadingPhoto] = useState(false);
+
+  function processSelectedAsset(asset) {
+    setSelectedAsset(asset);
     setPhotoPreviewUri(asset.uri);
     setPhotoUrl(null);
     setError(null);
-
-    try {
-      const uploaded = await uploadMutation.mutateAsync(asset);
-      setPhotoUrl(uploaded.photoUrl);
-    } catch (err) {
-      setError(err.message || "Failed to upload photo. You can try retaking it.");
-    }
   }
 
   async function handleTakePhoto() {
@@ -72,11 +69,11 @@ export default function BookPickupScreen({ navigation }) {
       const result = await ImagePicker.launchCameraAsync({
         mediaTypes: ["images"],
         quality: 0.7,
-        allowsEditing: true,
+        allowsEditing: false,
       });
 
       if (result.canceled || !result.assets?.length) return;
-      await processSelectedAsset(result.assets[0]);
+      processSelectedAsset(result.assets[0]);
     } catch (err) {
       setError("Unable to open camera: " + err.message);
     }
@@ -94,17 +91,18 @@ export default function BookPickupScreen({ navigation }) {
       const result = await ImagePicker.launchImageLibraryAsync({
         mediaTypes: ["images"],
         quality: 0.7,
-        allowsEditing: true,
+        allowsEditing: false,
       });
 
       if (result.canceled || !result.assets?.length) return;
-      await processSelectedAsset(result.assets[0]);
+      processSelectedAsset(result.assets[0]);
     } catch (err) {
       setError("Unable to open gallery: " + err.message);
     }
   }
 
   function handleRemovePhoto() {
+    setSelectedAsset(null);
     setPhotoPreviewUri(null);
     setPhotoUrl(null);
   }
@@ -218,19 +216,34 @@ export default function BookPickupScreen({ navigation }) {
       }
     }
 
+    let uploadedPhotoUrl = photoUrl;
+    if (selectedAsset && !uploadedPhotoUrl) {
+      setIsUploadingPhoto(true);
+      try {
+        const uploadRes = await uploadMutation.mutateAsync(selectedAsset);
+        uploadedPhotoUrl = uploadRes.photoUrl;
+        setPhotoUrl(uploadedPhotoUrl);
+      } catch (uploadErr) {
+        setIsUploadingPhoto(false);
+        return setError("Photo upload failed: " + (uploadErr.message || "Network error. Please try again or remove photo."));
+      } finally {
+        setIsUploadingPhoto(false);
+      }
+    }
+
     createMutation.mutate({
       wasteType,
       quantityBand,
       slotPeriod,
       address: address.trim(),
       requestedDate: requestedDate.toISOString(),
-      ...(photoUrl ? { photoUrl } : {}),
+      ...(uploadedPhotoUrl ? { photoUrl: uploadedPhotoUrl } : {}),
       latitude: finalCoords.latitude,
       longitude: finalCoords.longitude,
     });
   }
 
-  const submitting = createMutation.isPending;
+  const submitting = createMutation.isPending || isUploadingPhoto;
 
   return (
     <Screen>
@@ -340,49 +353,36 @@ export default function BookPickupScreen({ navigation }) {
         {photoPreviewUri ? (
           <View style={styles.previewContainer}>
             <Image source={{ uri: photoPreviewUri }} style={styles.photo} resizeMode="cover" />
-            {uploadMutation.isPending && (
+            {isUploadingPhoto && (
               <View style={styles.photoOverlay}>
                 <ActivityIndicator color={colors.white} />
-                <Text style={styles.uploadingText}>Uploading photo…</Text>
+                <Text style={styles.uploadingText}>Uploading photo...</Text>
               </View>
             )}
             <View style={styles.photoActionRow}>
               <Pressable
-                style={[styles.smallBtn, styles.retakeBtn]}
-                onPress={handleTakePhoto}
-                disabled={uploadMutation.isPending}
-              >
-                <Text style={styles.smallBtnText}>📷 Retake</Text>
-              </Pressable>
-              <Pressable
-                style={[styles.smallBtn, styles.galleryBtn]}
-                onPress={handlePickGallery}
-                disabled={uploadMutation.isPending}
-              >
-                <Text style={styles.smallBtnText}>🖼️ Choose Other</Text>
-              </Pressable>
-              <Pressable
                 style={[styles.smallBtn, styles.removeBtn]}
                 onPress={handleRemovePhoto}
-                disabled={uploadMutation.isPending}
+                disabled={isUploadingPhoto}
               >
-                <Text style={[styles.smallBtnText, styles.removeBtnText]}>🗑️ Remove</Text>
+                <Ionicons name="trash-outline" size={15} color={colors.red600} style={{ marginRight: 4 }} />
+                <Text style={[styles.smallBtnText, styles.removeBtnText]}>Remove Photo</Text>
               </Pressable>
             </View>
             {photoUrl && (
-              <Text style={styles.uploadedBadge}>✓ Photo uploaded & attached successfully</Text>
+              <Text style={styles.uploadedBadge}>✓ Photo attached</Text>
             )}
           </View>
         ) : (
           <View style={styles.photoOptionsGrid}>
             <Pressable style={styles.photoOptionBox} onPress={handleTakePhoto}>
-              <Text style={styles.photoOptionIcon}>📷</Text>
+              <Ionicons name="camera-outline" size={26} color={colors.brand700} style={{ marginBottom: 4 }} />
               <Text style={styles.photoOptionTitle}>Take Photo</Text>
               <Text style={styles.photoOptionSubtitle}>Use device camera</Text>
             </Pressable>
 
             <Pressable style={styles.photoOptionBox} onPress={handlePickGallery}>
-              <Text style={styles.photoOptionIcon}>🖼️</Text>
+              <Ionicons name="images-outline" size={26} color={colors.brand700} style={{ marginBottom: 4 }} />
               <Text style={styles.photoOptionTitle}>Upload from Gallery</Text>
               <Text style={styles.photoOptionSubtitle}>Choose existing image</Text>
             </Pressable>

@@ -3,11 +3,18 @@ const bcrypt = require("bcryptjs");
 const prisma = require("./client");
 const { BADGES, STARTER_REWARDS } = require("../config/constants");
 
-// Demo city coordinates: Mumbai (Bandra - BKC Eco-Hub)
+// Demo city coordinates: Miraj (with primary vehicle placed 2-3 km from sample pickup)
 const DEMO_CITY = {
-  name: "Mumbai",
-  hub: { lat: 19.0657, lng: 72.8687 }, // BKC Operations Hub
-  samplePickup: { lat: 19.0544, lng: 72.8402, address: "Plot 12, Hill Road, Bandra West, Mumbai" },
+  name: "Miraj",
+  samplePickup: {
+    lat: 16.8413,
+    lng: 74.6016,
+    address: "Station Road, Near Miraj Junction, Miraj, Maharashtra 416410",
+  },
+  hub: {
+    lat: 16.8580, // ~2.3 km northeast from sample pickup
+    lng: 74.6150,
+  },
 };
 
 async function main() {
@@ -84,7 +91,7 @@ async function main() {
   });
   console.log(`✓ Upserted citizen account: ${citizenEmail}`);
 
-  // 6. Fleet Vehicles in Demo City (Mumbai) - idempotent upsert by registration_no
+  // 6. Fleet Vehicles in Demo City (Miraj) - idempotent upsert by registration_no
   const reg1 = "MH-02-WW-1001";
   const vehicle1 = await prisma.vehicle.upsert({
     where: { registrationNo: reg1 },
@@ -110,15 +117,15 @@ async function main() {
       lastLocationAt: new Date(),
     },
   });
-  console.log(`✓ Upserted primary vehicle ${reg1} assigned to ${driver.name}`);
+  console.log(`✓ Upserted primary vehicle ${reg1} assigned to ${driver.name} at Miraj Hub`);
 
   const reg2 = "MH-02-WW-2002";
   await prisma.vehicle.upsert({
     where: { registrationNo: reg2 },
     update: {
       isActive: true,
-      currentLat: 19.0544,
-      currentLng: 72.8402,
+      currentLat: 16.8480,
+      currentLng: 74.5980,
       currentSpeed: 0,
       currentHeading: 180,
       lastLocationAt: new Date(),
@@ -128,16 +135,16 @@ async function main() {
       type: "Tata Ace Recycler",
       capacity: 750,
       isActive: true,
-      currentLat: 19.0544,
-      currentLng: 72.8402,
+      currentLat: 16.8480,
+      currentLng: 74.5980,
       currentSpeed: 0,
       currentHeading: 180,
       lastLocationAt: new Date(),
     },
   });
-  console.log(`✓ Upserted secondary reserve vehicle ${reg2}`);
+  console.log(`✓ Upserted secondary reserve vehicle ${reg2} in Miraj`);
 
-  // 7. Seed an active tracked pickup with geocoded coordinates in Mumbai
+  // 7. Seed an active tracked pickup with geocoded coordinates in Miraj
   const existingActivePickup = await prisma.pickup.findFirst({
     where: { userId: citizen.id, status: "assigned" },
   });

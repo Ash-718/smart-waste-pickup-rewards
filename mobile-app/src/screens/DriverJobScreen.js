@@ -5,7 +5,6 @@ import {
   Text,
   TouchableOpacity,
   ScrollView,
-  SafeAreaView,
   Alert,
   Linking,
   ActivityIndicator,
@@ -14,7 +13,8 @@ import {
   Switch,
   Platform,
 } from "react-native";
-import MapView, { Marker } from "react-native-maps";
+import { SafeAreaView } from "react-native-safe-area-context";
+import MapView, { Marker, UrlTile } from "react-native-maps";
 import { Ionicons } from "@expo/vector-icons";
 import { useDriverTracking } from "../hooks/useDriverTracking";
 import { getPickupTracking } from "../api/pickups";
@@ -223,20 +223,35 @@ export default function DriverJobScreen({ route, navigation }) {
               latitudeDelta: 0.015,
               longitudeDelta: 0.015,
             }}
+            mapType="none"
+            onMapReady={() => console.log("[DriverJobScreen] Map ready")}
+            onError={(e) => console.warn("[DriverJobScreen] MapView error:", e?.nativeEvent || e)}
             showsUserLocation={true}
             showsCompass={false}
           >
+            <UrlTile
+              urlTemplate={process.env.EXPO_PUBLIC_TILE_URL || "https://tile.openstreetmap.org/{z}/{x}/{y}.png"}
+              maximumZ={19}
+              flipY={false}
+              zIndex={-1}
+            />
             <Marker
               coordinate={{ latitude: pickupCoords.lat, longitude: pickupCoords.lng }}
               title="Customer Pickup Spot"
               description={jobData?.address}
               tracksViewChanges={false}
             >
-              <View style={styles.mapPin}>
-                <Ionicons name="location" size={28} color={colors.red600} />
+              <View style={styles.pinWrapper}>
+                <View style={styles.pinCircle}>
+                  <View style={styles.pinDot} />
+                </View>
+                <View style={styles.pinTip} />
               </View>
             </Marker>
           </MapView>
+          <View style={styles.attributionPill} pointerEvents="none">
+            <Text style={styles.attributionPillText}>© OpenStreetMap</Text>
+          </View>
           <View style={styles.mapOverlayPill}>
             <Text style={styles.mapOverlayText}>
               {distanceToPickup !== null ? `Distance: ~${distanceToPickup}m away` : "Calculating GPS distance..."}
@@ -515,9 +530,56 @@ const styles = StyleSheet.create({
   map: {
     ...StyleSheet.absoluteFillObject,
   },
-  mapPin: {
+  pinWrapper: {
     alignItems: "center",
     justifyContent: "center",
+    width: 32,
+    height: 38,
+  },
+  pinCircle: {
+    width: 26,
+    height: 26,
+    borderRadius: 13,
+    backgroundColor: colors.red600,
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 2,
+    borderColor: colors.white,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 3,
+    elevation: 4,
+  },
+  pinDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: colors.white,
+  },
+  pinTip: {
+    width: 0,
+    height: 0,
+    borderLeftWidth: 5,
+    borderRightWidth: 5,
+    borderTopWidth: 8,
+    borderLeftColor: "transparent",
+    borderRightColor: "transparent",
+    borderTopColor: colors.red600,
+    marginTop: -2,
+  },
+  attributionPill: {
+    position: "absolute",
+    top: 6,
+    right: 6,
+    backgroundColor: "rgba(255,255,255,0.75)",
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
+  },
+  attributionPillText: {
+    fontSize: 9,
+    color: colors.neutral700,
   },
   mapOverlayPill: {
     position: "absolute",

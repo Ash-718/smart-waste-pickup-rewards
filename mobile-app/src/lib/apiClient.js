@@ -4,12 +4,12 @@ import { Platform } from "react-native";
 function resolveApiBaseUrl() {
   const envUrl = process.env.EXPO_PUBLIC_API_BASE_URL;
 
-  // If envUrl is set to a remote domain (not localhost), use it directly
-  if (envUrl && !envUrl.includes("localhost") && !envUrl.includes("127.0.0.1")) {
+  // If envUrl is a remote https domain (e.g. production/staging), use it directly
+  if (envUrl && envUrl.startsWith("https://")) {
     return envUrl;
   }
 
-  // Web environment can always access localhost
+  // Web environment can access localhost directly
   if (Platform.OS === "web") {
     return envUrl || "http://localhost:4000/api";
   }
@@ -25,6 +25,11 @@ function resolveApiBaseUrl() {
     if (ip && ip !== "localhost" && ip !== "127.0.0.1") {
       return `http://${ip}:4000/api`;
     }
+  }
+
+  // If envUrl is set to a LAN IP, use it
+  if (envUrl && !envUrl.includes("localhost") && !envUrl.includes("127.0.0.1")) {
+    return envUrl;
   }
 
   // Android emulator fallback
@@ -110,7 +115,9 @@ function getAuthToken() {
 
 function resolveSocketBaseUrl() {
   const envSocketUrl = process.env.EXPO_PUBLIC_SOCKET_BASE_URL;
-  if (envSocketUrl) return envSocketUrl;
+  if (envSocketUrl && envSocketUrl.startsWith("https://")) {
+    return envSocketUrl;
+  }
   return resolveApiBaseUrl().replace(/\/api\/?$/, "");
 }
 

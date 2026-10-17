@@ -1,13 +1,12 @@
 import { useState, useEffect, useRef } from "react";
-import { StyleSheet, View, Text, Platform, Animated } from "react-native";
+import { StyleSheet, View, Text, Animated } from "react-native";
 import { Marker } from "react-native-maps";
-import { Ionicons } from "@expo/vector-icons";
 import { colors } from "../theme/colors";
 
 /**
  * Custom animated vehicle marker.
+ * Built with 100% pure Views (ZERO icon font dependency) so it renders immediately and reliably on all devices.
  * Smoothly interpolates coordinates and heading rotation between telemetry updates to avoid jumps.
- * Optimizes performance with tracksViewChanges={false} after initial layout.
  */
 export default function VehicleMarker({ location, registrationNo }) {
   const [tracksViewChanges, setTracksViewChanges] = useState(true);
@@ -69,7 +68,7 @@ export default function VehicleMarker({ location, registrationNo }) {
         {/* Subtle pulsating radar halo */}
         <View style={styles.halo} />
 
-        {/* Rotated Truck Compass Badge */}
+        {/* Rotated Vehicle Compass Badge */}
         <Animated.View
           style={[
             styles.badge,
@@ -78,10 +77,16 @@ export default function VehicleMarker({ location, registrationNo }) {
             },
           ]}
         >
-          {/* Direction indicator arrow */}
+          {/* Direction indicator pointer */}
           <View style={styles.pointer} />
-          {/* Truck Vector Icon */}
-          <Ionicons name="car" size={20} color={colors.white} />
+
+          {/* Pure View-based Vehicle Glyph (Zero font dependency) */}
+          <View style={styles.vehicleChassis}>
+            <View style={styles.vehicleCab} />
+            <View style={styles.vehicleBed} />
+            <View style={styles.headlightLeft} />
+            <View style={styles.headlightRight} />
+          </View>
         </Animated.View>
 
         {/* Registration pill */}
@@ -138,8 +143,45 @@ const styles = StyleSheet.create({
     borderRightColor: "transparent",
     borderBottomColor: colors.white,
   },
-  icon: {
-    fontSize: 20,
+  vehicleChassis: {
+    width: 22,
+    height: 22,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  vehicleCab: {
+    width: 13,
+    height: 8,
+    backgroundColor: colors.white,
+    borderTopLeftRadius: 3,
+    borderTopRightRadius: 3,
+  },
+  vehicleBed: {
+    width: 17,
+    height: 10,
+    backgroundColor: "rgba(255, 255, 255, 0.9)",
+    borderRadius: 2,
+    marginTop: 1,
+    borderWidth: 1,
+    borderColor: "rgba(0, 0, 0, 0.1)",
+  },
+  headlightLeft: {
+    position: "absolute",
+    top: 1,
+    left: 4,
+    width: 3,
+    height: 2,
+    backgroundColor: "#FDE047",
+    borderRadius: 1,
+  },
+  headlightRight: {
+    position: "absolute",
+    top: 1,
+    right: 4,
+    width: 3,
+    height: 2,
+    backgroundColor: "#FDE047",
+    borderRadius: 1,
   },
   regPill: {
     position: "absolute",

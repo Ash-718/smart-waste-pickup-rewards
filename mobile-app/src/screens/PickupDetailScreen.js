@@ -101,7 +101,7 @@ export default function PickupDetailScreen({ route, navigation }) {
 
       {["assigned", "on_the_way", "arrived"].includes(pickup.status) && (
         <Button
-          label="Track Live Vehicle"
+          title="Track Live Vehicle"
           onPress={() => navigation.navigate("TrackPickup", { pickupId: pickup.id })}
           style={{ marginTop: 16 }}
         />
