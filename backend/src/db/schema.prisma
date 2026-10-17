@@ -37,6 +37,8 @@ enum SlotPeriod {
 enum PickupStatus {
   requested
   assigned
+  on_the_way
+  arrived
   completed
   cancelled
   rejected
@@ -51,11 +53,13 @@ model User {
   role         Role     @default(citizen)
   createdAt    DateTime @default(now()) @map("created_at")
 
-  pickups           Pickup[]           @relation("UserPickups")
-  assignedPickups   Pickup[]           @relation("AdminAssignedPickups")
-  pointsLedger      PointsLedger[]
-  userBadges        UserBadge[]
-  rewardRedemptions RewardRedemption[]
+  pickups                   Pickup[]           @relation("UserPickups")
+  assignedPickups           Pickup[]           @relation("AdminAssignedPickups")
+  assignedPickupAssignments PickupAssignment[] @relation("AdminAssignedPickupAssignments")
+  vehicle                   Vehicle?           @relation("DriverVehicle")
+  pointsLedger              PointsLedger[]
+  userBadges                UserBadge[]
+  rewardRedemptions         RewardRedemption[]
 
   @@map("users")
 }
@@ -68,6 +72,8 @@ model Pickup {
   quantityBand    QuantityBand @map("quantity_band")
   wasteQuantity   Float?       @map("waste_quantity")
   address         String
+  latitude        Float?
+  longitude       Float?
   slotPeriod      SlotPeriod   @map("slot_period")
   requestedDate   DateTime     @map("requested_date") @db.Date
   status          PickupStatus @default(requested)
@@ -80,10 +86,69 @@ model Pickup {
   updatedAt       DateTime     @updatedAt @map("updated_at")
 
   pointsLedgerEntry PointsLedger?
+  assignments       PickupAssignment[]
 
   @@index([userId, status])
   @@index([status])
   @@map("pickups")
+}
+
+model Vehicle {
+  id             String    @id @default(uuid())
+  registrationNo String    @unique @map("registration_no")
+  type           String
+  capacity       Float
+  driverId       String?   @unique @map("driver_id")
+  driver         User?     @relation("DriverVehicle", fields: [driverId], references: [id])
+  isActive       Boolean   @default(true) @map("is_active")
+
+  currentLat     Float?    @map("current_lat")
+  currentLng     Float?    @map("current_lng")
+  currentSpeed   Float?    @map("current_speed")
+  currentHeading Float?    @map("current_heading")
+  lastLocationAt DateTime? @map("last_location_at")
+
+  createdAt      DateTime  @default(now()) @map("created_at")
+  updatedAt      DateTime  @updatedAt @map("updated_at")
+
+  assignments    PickupAssignment[]
+  locations      VehicleLocation[]
+
+  @@map("vehicles")
+}
+
+model PickupAssignment {
+  id           String    @id @default(uuid())
+  pickupId     String    @map("pickup_id")
+  pickup       Pickup    @relation(fields: [pickupId], references: [id], onDelete: Cascade)
+  vehicleId    String    @map("vehicle_id")
+  vehicle      Vehicle   @relation(fields: [vehicleId], references: [id])
+  assignedById String    @map("assigned_by_id")
+  assignedBy   User      @relation("AdminAssignedPickupAssignments", fields: [assignedById], references: [id])
+  assignedAt   DateTime  @default(now()) @map("assigned_at")
+  startedAt    DateTime? @map("started_at")
+  arrivedAt    DateTime? @map("arrived_at")
+  completedAt  DateTime? @map("completed_at")
+  unassignedAt DateTime? @map("unassigned_at")
+  isActive     Boolean   @default(true) @map("is_active")
+
+  @@index([pickupId, isActive])
+  @@index([vehicleId, isActive])
+  @@map("pickup_assignments")
+}
+
+model VehicleLocation {
+  id         String   @id @default(uuid())
+  vehicleId  String   @map("vehicle_id")
+  vehicle    Vehicle  @relation(fields: [vehicleId], references: [id], onDelete: Cascade)
+  lat        Float
+  lng        Float
+  speed      Float    @default(0)
+  heading    Float    @default(0)
+  recordedAt DateTime @default(now()) @map("recorded_at")
+
+  @@index([vehicleId, recordedAt])
+  @@map("vehicle_locations")
 }
 
 model PointsLedger {

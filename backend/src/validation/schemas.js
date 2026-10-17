@@ -41,11 +41,14 @@ const createPickupSchema = z.object({
   slotPeriod: z.enum(slotPeriodValues),
   requestedDate: z.coerce.date(),
   photoUrl: z.string().url().optional(),
+  latitude: z.number().min(-90).max(90).nullable().optional(),
+  longitude: z.number().min(-180).max(180).nullable().optional(),
 });
 
 const assignPickupSchema = z.object({
-  adminId: z.string().uuid().optional(),
+  vehicleId: z.string().uuid().optional(),
   collectorId: z.string().uuid().optional(),
+  adminId: z.string().uuid().optional(),
   slotPeriod: z.enum(slotPeriodValues).optional(),
   requestedDate: z.coerce.date().optional(),
 });

@@ -102,19 +102,34 @@ async function runTests() {
 
   // 5. Admin lists collectors for assignment
   console.log("\n5. Testing List Collectors...");
-  const collectorsRes = await request("/api/admin/collectors", { headers: adminHeaders });
-  if (collectorsRes.status !== 200 || !collectorsRes.body.collectors?.length) {
-    throw new Error(`Failed to fetch collectors: ${JSON.stringify(collectorsRes.body)}`);
-  }
-  const collector = collectorsRes.body.collectors[0];
-  console.log("✓ Available collector found:", collector.name, "(id:", collector.id, ")");
+  const vehiclesRes = await request("/api/admin/vehicles", { headers: adminHeaders });
+  let activeVehicle = vehiclesRes.body.vehicles?.find((v) => v.isActive && v.driver);
+  let collector = activeVehicle?.driver;
+  let vehicleId = activeVehicle?.id;
 
-  // 6. Admin assigns pickup to collector
+  if (!activeVehicle) {
+    const collectorsRes = await request("/api/admin/collectors", { headers: adminHeaders });
+    collector = collectorsRes.body.collectors?.[0];
+    const newVeh = await request("/api/admin/vehicles", {
+      method: "POST",
+      headers: adminHeaders,
+      body: {
+        registrationNo: `EV-${Date.now().toString().slice(-6)}`,
+        type: "Electric Van",
+        capacity: 500,
+        driverId: collector.id,
+      },
+    });
+    vehicleId = newVeh.body.vehicle?.id;
+  }
+  console.log("✓ Available collector found:", collector?.name, "(id:", collector?.id, ")");
+
+  // 6. Admin assigns pickup to collector & vehicle
   console.log("\n6. Testing Pickup Assignment...");
   const assignRes = await request(`/api/pickups/${createdPickup.id}/assign`, {
     method: "PATCH",
     headers: adminHeaders,
-    body: { collectorId: collector.id, slotPeriod: "AFTERNOON" },
+    body: { vehicleId, collectorId: collector.id, slotPeriod: "AFTERNOON" },
   });
   if (assignRes.status !== 200) {
     throw new Error(`Assignment failed: ${JSON.stringify(assignRes.body)}`);
@@ -164,12 +179,20 @@ async function runTests() {
       requestedDate: new Date().toISOString(),
     },
   });
+  await request(`/api/pickups/${pickup2.body.pickup.id}/assign`, {
+    method: "PATCH",
+    headers: adminHeaders,
+    body: { vehicleId, collectorId: collector.id },
+  });
   const completedRes = await request(`/api/pickups/${pickup2.body.pickup.id}/status`, {
     method: "PATCH",
     headers: adminHeaders,
     body: { status: "completed", wasteQuantity: 8.5 },
   });
-  console.log("✓ Pickup completed! Points awarded:", completedRes.body.pointsEarned, "wasteQuantity:", completedRes.body.pickup.wasteQuantity);
+  if (completedRes.status !== 200) {
+    throw new Error(`Complete failed: ${JSON.stringify(completedRes.body)}`);
+  }
+  console.log("✓ Pickup completed! Points awarded:", completedRes.body.pointsEarned, "wasteQuantity:", completedRes.body.pickup?.wasteQuantity);
 
   // 11. Citizen checks My Impact
   console.log("\n11. Testing Citizen My Impact Profile...");

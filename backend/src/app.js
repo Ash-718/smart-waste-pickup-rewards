@@ -12,7 +12,12 @@ const adminRoutes = require("./routes/adminRoutes");
 const metaRoutes = require("./routes/metaRoutes");
 const uploadRoutes = require("./routes/uploadRoutes");
 
+const http = require("http");
 const path = require("path");
+const { initSocketServer } = require("./socket");
+const trackingRoutes = require("./routes/trackingRoutes");
+const driverRoutes = require("./routes/driverRoutes");
+
 const app = express();
 app.disable("x-powered-by");
 
@@ -31,7 +36,9 @@ app.use("/uploads", express.static(path.join(__dirname, "../uploads")));
 app.get("/api/health", (req, res) => res.json({ status: "ok" }));
 
 app.use("/api/auth", authRoutes);
+app.use("/api/pickups", trackingRoutes);
 app.use("/api/pickups", pickupRoutes);
+app.use("/api/driver", driverRoutes);
 app.use("/api/points", pointsRoutes);
 app.use("/api/badges", badgeRoutes);
 app.use("/api/rewards", rewardRoutes);
@@ -43,6 +50,10 @@ app.use((req, res) => res.status(404).json({ error: "Not found" }));
 app.use(errorHandler);
 
 const PORT = process.env.PORT || 4000;
-app.listen(PORT, () => console.log(`WasteWise API listening on port ${PORT}`));
+const server = http.createServer(app);
+initSocketServer(server);
 
+server.listen(PORT, () => console.log(`WasteWise API & Socket.IO listening on port ${PORT}`));
+
+app.server = server;
 module.exports = app;
