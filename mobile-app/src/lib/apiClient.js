@@ -104,5 +104,25 @@ async function apiFetch(path, { method = "GET", body, isFormData = false } = {})
   return data;
 }
 
-export { apiFetch, setAuthToken, setOnUnauthorized, ApiError };
+function getAuthToken() {
+  return authToken;
+}
+
+function resolveSocketBaseUrl() {
+  const envSocketUrl = process.env.EXPO_PUBLIC_SOCKET_BASE_URL;
+  if (envSocketUrl) return envSocketUrl;
+  return resolveApiBaseUrl().replace(/\/api\/?$/, "");
+}
+
+const SOCKET_BASE_URL = resolveSocketBaseUrl();
+
+export {
+  apiFetch,
+  setAuthToken,
+  getAuthToken,
+  setOnUnauthorized,
+  ApiError,
+  API_BASE_URL,
+  SOCKET_BASE_URL,
+};
 
