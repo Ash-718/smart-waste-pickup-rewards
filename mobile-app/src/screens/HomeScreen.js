@@ -1,5 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { Pressable, StyleSheet, Text, View } from "react-native";
+import { Ionicons } from "@expo/vector-icons";
 import Screen from "../components/Screen";
 import Card from "../components/Card";
 import Button from "../components/Button";
@@ -147,9 +148,10 @@ export default function HomeScreen({ navigation }) {
               </Text>
 
               {pickup.status === "assigned" && pickup.assignedAdmin && (
-                <View style={styles.assignedNotice}>
+                <View style={[styles.assignedNotice, { flexDirection: "row", alignItems: "center" }]}>
+                  <Ionicons name="person" size={13} color={colors.neutral700} style={{ marginRight: 5 }} />
                   <Text style={styles.assignedNoticeText} numberOfLines={1}>
-                    👷 Collector: {pickup.assignedAdmin.name}
+                    Collector: {pickup.assignedAdmin.name}
                   </Text>
                 </View>
               )}

@@ -29,7 +29,16 @@
           "photosPermission": "WasteWise uses your photos to attach a picture of the recyclables for your pickup request."
         }
       ],
-      "expo-status-bar"
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "WasteWise needs your location to pinpoint pickup coordinates and enable live collection vehicle tracking.",
+          "isIosBackgroundLocationEnabled": false
+        }
+      ],
+      "expo-status-bar",
+      "expo-font",
+      "expo-splash-screen"
     ]
   }
 }

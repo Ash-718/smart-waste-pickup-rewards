@@ -1,4 +1,13 @@
+const prisma = require("./src/db/client");
+
 let baseUrl = "http://localhost:4000";
+
+// Track fixtures created during this test run for clean teardown
+const testCreatedUserIds = [];
+const testCreatedPickupIds = [];
+const testCreatedVehicleIds = [];
+const testCreatedRewardIds = [];
+const testCreatedBadgeIds = [];
 
 async function request(path, options = {}) {
   const url = `${baseUrl}${path}`;
@@ -19,6 +28,105 @@ async function request(path, options = {}) {
     json = text;
   }
   return { status: res.status, body: json };
+}
+
+async function cleanupTestData() {
+  console.log("\n--- [TEARDOWN] Purging Complete Flow Test Fixtures ---");
+  try {
+    // 1. Points Ledger entries
+    if (testCreatedPickupIds.length > 0 || testCreatedUserIds.length > 0) {
+      await prisma.pointsLedger.deleteMany({
+        where: {
+          OR: [
+            ...(testCreatedPickupIds.length > 0 ? [{ pickupId: { in: testCreatedPickupIds } }] : []),
+            ...(testCreatedUserIds.length > 0 ? [{ userId: { in: testCreatedUserIds } }] : []),
+          ],
+        },
+      });
+    }
+
+    // 2. User Badges
+    if (testCreatedBadgeIds.length > 0 || testCreatedUserIds.length > 0) {
+      await prisma.userBadge.deleteMany({
+        where: {
+          OR: [
+            ...(testCreatedBadgeIds.length > 0 ? [{ badgeId: { in: testCreatedBadgeIds } }] : []),
+            ...(testCreatedUserIds.length > 0 ? [{ userId: { in: testCreatedUserIds } }] : []),
+          ],
+        },
+      });
+    }
+
+    // 3. Reward Redemptions
+    if (testCreatedRewardIds.length > 0 || testCreatedUserIds.length > 0) {
+      await prisma.rewardRedemption.deleteMany({
+        where: {
+          OR: [
+            ...(testCreatedRewardIds.length > 0 ? [{ rewardId: { in: testCreatedRewardIds } }] : []),
+            ...(testCreatedUserIds.length > 0 ? [{ userId: { in: testCreatedUserIds } }] : []),
+          ],
+        },
+      });
+    }
+
+    // 4. Pickup Assignments
+    if (testCreatedPickupIds.length > 0 || testCreatedVehicleIds.length > 0) {
+      await prisma.pickupAssignment.deleteMany({
+        where: {
+          OR: [
+            ...(testCreatedPickupIds.length > 0 ? [{ pickupId: { in: testCreatedPickupIds } }] : []),
+            ...(testCreatedVehicleIds.length > 0 ? [{ vehicleId: { in: testCreatedVehicleIds } }] : []),
+          ],
+        },
+      });
+    }
+
+    // 5. Vehicle Locations
+    if (testCreatedVehicleIds.length > 0) {
+      await prisma.vehicleLocation.deleteMany({
+        where: { vehicleId: { in: testCreatedVehicleIds } },
+      });
+    }
+
+    // 6. Pickups
+    if (testCreatedPickupIds.length > 0) {
+      await prisma.pickup.deleteMany({
+        where: { id: { in: testCreatedPickupIds } },
+      });
+    }
+
+    // 7. Vehicles
+    if (testCreatedVehicleIds.length > 0) {
+      await prisma.vehicle.deleteMany({
+        where: { id: { in: testCreatedVehicleIds } },
+      });
+    }
+
+    // 8. Rewards
+    if (testCreatedRewardIds.length > 0) {
+      await prisma.reward.deleteMany({
+        where: { id: { in: testCreatedRewardIds } },
+      });
+    }
+
+    // 9. Badges
+    if (testCreatedBadgeIds.length > 0) {
+      await prisma.badge.deleteMany({
+        where: { id: { in: testCreatedBadgeIds } },
+      });
+    }
+
+    // 10. Users
+    if (testCreatedUserIds.length > 0) {
+      await prisma.user.deleteMany({
+        where: { id: { in: testCreatedUserIds } },
+      });
+    }
+
+    console.log("✓ Teardown complete: All isolated test fixtures cleanly purged.");
+  } catch (err) {
+    console.error("Warning during teardown:", err.message);
+  }
 }
 
 async function runTests() {
@@ -50,7 +158,7 @@ async function runTests() {
     citizenUser = citizenLogin.body.user;
     console.log("✓ Citizen logged in (ashmit@gmail.com)");
   } else {
-    // Try registering a fresh test citizen
+    // Register a fresh dedicated test citizen (will be torn down)
     const uniqueEmail = `testcitizen_${Date.now()}@pruthvi.ngo`;
     const regRes = await request("/api/auth/register", {
       method: "POST",
@@ -61,7 +169,8 @@ async function runTests() {
     }
     citizenToken = regRes.body.token;
     citizenUser = regRes.body.user;
-    console.log(`✓ New citizen registered (${uniqueEmail})`);
+    testCreatedUserIds.push(citizenUser.id);
+    console.log(`✓ New test citizen registered (${uniqueEmail})`);
   }
 
   const adminHeaders = { Authorization: `Bearer ${adminToken}` };
@@ -98,23 +207,40 @@ async function runTests() {
     throw new Error(`Failed to create pickup: ${JSON.stringify(createPickupRes.body)}`);
   }
   const createdPickup = createPickupRes.body.pickup;
+  testCreatedPickupIds.push(createdPickup.id);
   console.log("✓ Pickup created:", createdPickup.id, "wasteQuantity:", createdPickup.wasteQuantity, "kg");
 
   // 5. Admin lists collectors for assignment
   console.log("\n5. Testing List Collectors...");
-  const collectorsRes = await request("/api/admin/collectors", { headers: adminHeaders });
-  if (collectorsRes.status !== 200 || !collectorsRes.body.collectors?.length) {
-    throw new Error(`Failed to fetch collectors: ${JSON.stringify(collectorsRes.body)}`);
-  }
-  const collector = collectorsRes.body.collectors[0];
-  console.log("✓ Available collector found:", collector.name, "(id:", collector.id, ")");
+  const vehiclesRes = await request("/api/admin/vehicles", { headers: adminHeaders });
+  let activeVehicle = vehiclesRes.body.vehicles?.find((v) => v.isActive && v.driver);
+  let collector = activeVehicle?.driver;
+  let vehicleId = activeVehicle?.id;
 
-  // 6. Admin assigns pickup to collector
+  if (!activeVehicle) {
+    const collectorsRes = await request("/api/admin/collectors", { headers: adminHeaders });
+    collector = collectorsRes.body.collectors?.[0];
+    const newVeh = await request("/api/admin/vehicles", {
+      method: "POST",
+      headers: adminHeaders,
+      body: {
+        registrationNo: `EV-${Date.now().toString().slice(-6)}`,
+        type: "Electric Van",
+        capacity: 500,
+        driverId: collector.id,
+      },
+    });
+    vehicleId = newVeh.body.vehicle?.id;
+    if (vehicleId) testCreatedVehicleIds.push(vehicleId);
+  }
+  console.log("✓ Available collector found:", collector?.name, "(id:", collector?.id, ")");
+
+  // 6. Admin assigns pickup to collector & vehicle
   console.log("\n6. Testing Pickup Assignment...");
   const assignRes = await request(`/api/pickups/${createdPickup.id}/assign`, {
     method: "PATCH",
     headers: adminHeaders,
-    body: { collectorId: collector.id, slotPeriod: "AFTERNOON" },
+    body: { vehicleId, collectorId: collector.id, slotPeriod: "AFTERNOON" },
   });
   if (assignRes.status !== 200) {
     throw new Error(`Assignment failed: ${JSON.stringify(assignRes.body)}`);
@@ -164,12 +290,24 @@ async function runTests() {
       requestedDate: new Date().toISOString(),
     },
   });
+  if (pickup2.body.pickup?.id) {
+    testCreatedPickupIds.push(pickup2.body.pickup.id);
+  }
+
+  await request(`/api/pickups/${pickup2.body.pickup.id}/assign`, {
+    method: "PATCH",
+    headers: adminHeaders,
+    body: { vehicleId, collectorId: collector.id },
+  });
   const completedRes = await request(`/api/pickups/${pickup2.body.pickup.id}/status`, {
     method: "PATCH",
     headers: adminHeaders,
     body: { status: "completed", wasteQuantity: 8.5 },
   });
-  console.log("✓ Pickup completed! Points awarded:", completedRes.body.pointsEarned, "wasteQuantity:", completedRes.body.pickup.wasteQuantity);
+  if (completedRes.status !== 200) {
+    throw new Error(`Complete failed: ${JSON.stringify(completedRes.body)}`);
+  }
+  console.log("✓ Pickup completed! Points awarded:", completedRes.body.pointsEarned, "wasteQuantity:", completedRes.body.pickup?.wasteQuantity);
 
   // 11. Citizen checks My Impact
   console.log("\n11. Testing Citizen My Impact Profile...");
@@ -193,6 +331,9 @@ async function runTests() {
       description: "Rich organic vermicompost produced from community waste.",
     },
   });
+  if (newReward.body.reward?.id) {
+    testCreatedRewardIds.push(newReward.body.reward.id);
+  }
   console.log("✓ Create New Reward:", newReward.status, newReward.body.reward?.name);
 
   const newBadge = await request("/api/badges", {
@@ -204,6 +345,9 @@ async function runTests() {
       description: "Dedicated to citizens who achieve 600+ points.",
     },
   });
+  if (newBadge.body.badge?.id) {
+    testCreatedBadgeIds.push(newBadge.body.badge.id);
+  }
   console.log("✓ Create New Badge:", newBadge.status, newBadge.body.badge?.name);
 
   const newCollector = await request("/api/admin/collectors", {
@@ -216,6 +360,9 @@ async function runTests() {
       password: "Collector@123",
     },
   });
+  if (newCollector.body.collector?.id) {
+    testCreatedUserIds.push(newCollector.body.collector.id);
+  }
   console.log("✓ Create New Collector:", newCollector.status, newCollector.body.collector?.name);
 
   console.log("\n========================================================");
@@ -223,11 +370,22 @@ async function runTests() {
   console.log("========================================================");
 }
 
-// Use existing running server on port 4000
-baseUrl = "http://localhost:4000";
-runTests()
-  .then(() => process.exit(0))
-  .catch((err) => {
+// Execution runner with guaranteed teardown
+async function main() {
+  try {
+    await runTests();
+  } catch (err) {
     console.error("\n❌ TEST ERROR:", err);
-    process.exit(1);
-  });
+    process.exitCode = 1;
+  } finally {
+    await cleanupTestData();
+    await prisma.$disconnect();
+    if (process.exitCode === 1) {
+      process.exit(1);
+    } else {
+      process.exit(0);
+    }
+  }
+}
+
+main();

@@ -4,12 +4,12 @@ import { Platform } from "react-native";
 function resolveApiBaseUrl() {
   const envUrl = process.env.EXPO_PUBLIC_API_BASE_URL;
 
-  // If envUrl is set to a remote domain (not localhost), use it directly
-  if (envUrl && !envUrl.includes("localhost") && !envUrl.includes("127.0.0.1")) {
+  // If envUrl is a remote https domain (e.g. production/staging), use it directly
+  if (envUrl && envUrl.startsWith("https://")) {
     return envUrl;
   }
 
-  // Web environment can always access localhost
+  // Web environment can access localhost directly
   if (Platform.OS === "web") {
     return envUrl || "http://localhost:4000/api";
   }
@@ -25,6 +25,11 @@ function resolveApiBaseUrl() {
     if (ip && ip !== "localhost" && ip !== "127.0.0.1") {
       return `http://${ip}:4000/api`;
     }
+  }
+
+  // If envUrl is set to a LAN IP, use it
+  if (envUrl && !envUrl.includes("localhost") && !envUrl.includes("127.0.0.1")) {
+    return envUrl;
   }
 
   // Android emulator fallback
@@ -87,7 +92,10 @@ async function apiFetch(path, { method = "GET", body, isFormData = false } = {})
     if (err.name === "AbortError") {
       throw new ApiError("The WasteWise server took too long to respond. Try again.", 0);
     }
-    throw new ApiError("Unable to connect to the server. Please try again.", 0);
+    throw new ApiError(
+      `Unable to connect to server: ${err.message || "Network request failed"}. Check your Wi-Fi connection.`,
+      0
+    );
   } finally {
     clearTimeout(timeout);
   }
@@ -99,10 +107,43 @@ async function apiFetch(path, { method = "GET", body, isFormData = false } = {})
     if (res.status === 401 && onUnauthorizedHandler && authToken) {
       onUnauthorizedHandler();
     }
-    throw new ApiError(data?.error || `Request failed (${res.status})`, res.status, data?.details);
+    throw new ApiError(data?.error || `Upload/Request failed (${res.status})`, res.status, data?.details);
   }
   return data;
 }
 
-export { apiFetch, setAuthToken, setOnUnauthorized, ApiError };
+function getAuthToken() {
+  return authToken;
+}
+
+function resolveSocketBaseUrl() {
+  const envSocketUrl = process.env.EXPO_PUBLIC_SOCKET_BASE_URL;
+  if (envSocketUrl && envSocketUrl.startsWith("https://")) {
+    return envSocketUrl;
+  }
+  return resolveApiBaseUrl().replace(/\/api\/?$/, "");
+}
+
+const SOCKET_BASE_URL = resolveSocketBaseUrl();
+
+function getMediaUrl(relativeOrAbsoluteUrl) {
+  if (!relativeOrAbsoluteUrl) return null;
+  if (relativeOrAbsoluteUrl.startsWith("http://") || relativeOrAbsoluteUrl.startsWith("https://")) {
+    return relativeOrAbsoluteUrl;
+  }
+  const base = resolveSocketBaseUrl();
+  const cleanPath = relativeOrAbsoluteUrl.startsWith("/") ? relativeOrAbsoluteUrl : `/${relativeOrAbsoluteUrl}`;
+  return `${base}${cleanPath}`;
+}
+
+export {
+  apiFetch,
+  setAuthToken,
+  getAuthToken,
+  setOnUnauthorized,
+  ApiError,
+  API_BASE_URL,
+  SOCKET_BASE_URL,
+  getMediaUrl,
+};
 

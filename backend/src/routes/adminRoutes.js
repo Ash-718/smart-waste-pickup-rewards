@@ -31,8 +31,33 @@ router.get("/analytics/waste-category", getWasteCategories);
 router.get("/users", listUsers);
 router.get("/users/:id", getUserProfile);
 
+const { assign, updateCoordinates, updateStatus, reject } = require("../controllers/pickupController");
+const {
+  getLiveFleet,
+  listVehicles,
+  createVehicle,
+  updateVehicle,
+  deleteVehicle,
+} = require("../controllers/vehicleController");
+
 // Collector / Staff management
 router.get("/collectors", listCollectors);
 router.post("/collectors", createCollector);
+
+// Pickup Assignment & Status Updates
+router.post("/pickups/:id/assign", assign);
+router.patch("/pickups/:id/assign", assign);
+router.patch("/pickups/:id/status", updateStatus);
+router.post("/pickups/:id/status", updateStatus);
+router.post("/pickups/:id/reject", reject);
+router.patch("/pickups/:id/reject", reject);
+router.patch("/pickups/:id/coordinates", updateCoordinates);
+
+// Fleet & Vehicle Management
+router.get("/vehicles/live", getLiveFleet);
+router.get("/vehicles", listVehicles);
+router.post("/vehicles", createVehicle);
+router.patch("/vehicles/:id", updateVehicle);
+router.delete("/vehicles/:id", deleteVehicle);
 
 module.exports = router;

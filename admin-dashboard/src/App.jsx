@@ -10,6 +10,8 @@ import ImpactDashboardPage from "./pages/ImpactDashboardPage";
 import AnalyticsPage from "./pages/AnalyticsPage";
 import UsersPage from "./pages/UsersPage";
 import RewardsBadgesPage from "./pages/RewardsBadgesPage";
+import LiveFleetPage from "./pages/LiveFleetPage";
+import VehiclesPage from "./pages/VehiclesPage";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -34,6 +36,22 @@ export default function App() {
               <Route index element={<Navigate to="/dashboard" replace />} />
               <Route path="/dashboard" element={<ImpactDashboardPage />} />
               <Route path="/analytics" element={<AnalyticsPage />} />
+              <Route
+                path="/fleet"
+                element={
+                  <ProtectedRoute adminOnly>
+                    <LiveFleetPage />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/vehicles"
+                element={
+                  <ProtectedRoute adminOnly>
+                    <VehiclesPage />
+                  </ProtectedRoute>
+                }
+              />
               <Route path="/queue" element={<PickupQueuePage />} />
               <Route path="/queue/:id" element={<PickupDetailPage />} />
               <Route path="/users" element={<UsersPage />} />

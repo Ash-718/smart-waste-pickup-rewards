@@ -5,13 +5,25 @@ const { evaluateBadgesForUser } = require("./badgeService");
 // atomically so a crash mid-way never leaves points credited without a
 // ledger row, or a ledger row without a badge check.
 async function completePickupAndAwardPoints(tx, pickup) {
-  const pointsEarned = pointsForQuantityBand(pickup.quantityBand);
+  // Idempotency check: verify if a points ledger entry already exists for this pickup
+  const existingLedger = await tx.pointsLedger.findUnique({
+    where: { pickupId: pickup.id },
+  });
 
   const updatedPickup = await tx.pickup.update({
     where: { id: pickup.id },
-    data: { status: "completed" },
+    data: {
+      status: "completed",
+      ...(pickup.wasteQuantity ? { wasteQuantity: pickup.wasteQuantity } : {}),
+    },
   });
 
+  if (existingLedger) {
+    // Already awarded — return existing record without double crediting
+    return { pickup: updatedPickup, ledgerEntry: existingLedger, newBadges: [] };
+  }
+
+  const pointsEarned = pointsForQuantityBand(pickup.quantityBand);
   const ledgerEntry = await tx.pointsLedger.create({
     data: {
       pickupId: pickup.id,
@@ -21,7 +33,6 @@ async function completePickupAndAwardPoints(tx, pickup) {
   });
 
   const newBadges = await evaluateBadgesForUser(tx, pickup.userId);
-
   return { pickup: updatedPickup, ledgerEntry, newBadges };
 }
 

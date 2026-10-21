@@ -1,5 +1,6 @@
 const prisma = require("../db/client");
 const { asyncHandler, HttpError } = require("../middleware/errorHandler");
+const { z } = require("zod");
 const {
   createPickupSchema,
   assignPickupSchema,
@@ -11,6 +12,8 @@ const {
   estimatedWasteKg,
 } = require("../config/constants");
 const { completePickupAndAwardPoints, getAvailablePoints } = require("../services/pointsService");
+const { assignVehicleToPickup } = require("../services/assignmentService");
+const { transitionPickupStatus } = require("../services/pickupStatusService");
 
 const create = asyncHandler(async (req, res) => {
   const data = createPickupSchema.parse(req.body);
@@ -26,6 +29,8 @@ const create = asyncHandler(async (req, res) => {
       slotPeriod: data.slotPeriod,
       requestedDate: data.requestedDate,
       photoUrl: data.photoUrl || null,
+      latitude: data.latitude !== undefined ? data.latitude : null,
+      longitude: data.longitude !== undefined ? data.longitude : null,
     },
     include: {
       user: { select: { id: true, name: true, email: true, phone: true } },
@@ -56,6 +61,16 @@ const list = asyncHandler(async (req, res) => {
     include: {
       user: { select: { id: true, name: true, email: true, phone: true } },
       assignedAdmin: { select: { id: true, name: true, role: true, email: true, phone: true } },
+      assignments: {
+        where: { isActive: true },
+        include: {
+          vehicle: {
+            include: {
+              driver: { select: { id: true, name: true, phone: true, email: true } },
+            },
+          },
+        },
+      },
       pointsLedgerEntry: true,
     },
   });
@@ -69,6 +84,16 @@ const getById = asyncHandler(async (req, res) => {
     include: {
       user: { select: { id: true, name: true, email: true, phone: true } },
       assignedAdmin: { select: { id: true, name: true, role: true, email: true, phone: true } },
+      assignments: {
+        where: { isActive: true },
+        include: {
+          vehicle: {
+            include: {
+              driver: { select: { id: true, name: true, phone: true, email: true } },
+            },
+          },
+        },
+      },
       pointsLedgerEntry: true,
     },
   });
@@ -83,101 +108,74 @@ const getById = asyncHandler(async (req, res) => {
 
 const assign = asyncHandler(async (req, res) => {
   const data = assignPickupSchema.parse(req.body);
-  const assignedUserId = data.collectorId || data.adminId || req.user.id;
 
-  const targetUser = await prisma.user.findUnique({ where: { id: assignedUserId } });
-  if (!targetUser || (targetUser.role !== "admin" && targetUser.role !== "collector")) {
-    throw new HttpError(400, "Assigned user must be an admin or collector");
+  let vehicleId = data.vehicleId;
+
+  // Support legacy payloads passing collectorId or adminId
+  if (!vehicleId) {
+    const targetUserId = data.collectorId || data.adminId;
+    if (targetUserId) {
+      const vehicle = await prisma.vehicle.findUnique({
+        where: { driverId: targetUserId },
+      });
+      if (!vehicle) {
+        throw new HttpError(
+          400,
+          "No active vehicle found for the specified collector. Please select a vehicle with an assigned driver."
+        );
+      }
+      vehicleId = vehicle.id;
+    }
   }
 
-  const pickup = await prisma.pickup.findUnique({ where: { id: req.params.id } });
-  if (!pickup) throw new HttpError(404, "Pickup not found");
-
-  const result = await prisma.pickup.updateMany({
-    where: { id: req.params.id, status: { notIn: ["completed", "cancelled"] } },
-    data: {
-      status: "assigned",
-      assignedAdminId: assignedUserId,
-      assignedAt: new Date(),
-      ...(data.slotPeriod ? { slotPeriod: data.slotPeriod } : {}),
-      ...(data.requestedDate ? { requestedDate: data.requestedDate } : {}),
-    },
-  });
-  if (result.count === 0) {
-    throw new HttpError(400, `Cannot assign a pickup that is already ${pickup.status}`);
+  if (!vehicleId) {
+    throw new HttpError(400, "Vehicle ID or a collector with an assigned vehicle is required");
   }
 
-  const updated = await prisma.pickup.findUnique({
-    where: { id: req.params.id },
-    include: {
-      user: { select: { id: true, name: true, email: true, phone: true } },
-      assignedAdmin: { select: { id: true, name: true, role: true, email: true, phone: true } },
-    },
+  const { pickup, assignment } = await assignVehicleToPickup({
+    pickupId: req.params.id,
+    vehicleId,
+    collectorId: data.collectorId || data.adminId,
+    adminUserId: req.user.id,
+    slotPeriod: data.slotPeriod,
+    requestedDate: data.requestedDate,
   });
 
-  res.json({ pickup: updated });
+  res.json({ pickup, assignment });
 });
 
 const updateStatus = asyncHandler(async (req, res) => {
   const data = updateStatusSchema.parse(req.body);
 
-  const pickup = await prisma.pickup.findUnique({ where: { id: req.params.id } });
-  if (!pickup) throw new HttpError(404, "Pickup not found");
-  if (pickup.status === "completed" || pickup.status === "cancelled") {
-    throw new HttpError(400, `Pickup is already ${pickup.status}`);
-  }
-
-  if (data.status === "rejected") {
-    if (!data.rejectionReason || !data.rejectionReason.trim()) {
-      throw new HttpError(400, "Rejection reason is required when rejecting a pickup");
-    }
-    const updated = await prisma.pickup.update({
-      where: { id: req.params.id },
-      data: {
-        status: "rejected",
-        rejectionReason: data.rejectionReason.trim(),
-      },
-      include: {
-        user: { select: { id: true, name: true, email: true, phone: true } },
-        assignedAdmin: { select: { id: true, name: true, role: true, email: true, phone: true } },
-      },
-    });
-    return res.json({ pickup: updated });
-  }
-
-  if (data.status === "completed") {
-    if (data.wasteQuantity) {
-      await prisma.pickup.update({
-        where: { id: req.params.id },
-        data: { wasteQuantity: data.wasteQuantity },
-      });
-      pickup.wasteQuantity = data.wasteQuantity;
-    }
-    const result = await prisma.$transaction((tx) => completePickupAndAwardPoints(tx, pickup));
-    const completedPickup = await prisma.pickup.findUnique({
-      where: { id: req.params.id },
-      include: {
-        user: { select: { id: true, name: true, email: true, phone: true } },
-        assignedAdmin: { select: { id: true, name: true, role: true, email: true, phone: true } },
-      },
-    });
-
-    return res.json({
-      pickup: completedPickup,
-      pointsEarned: result.ledgerEntry.pointsEarned,
-      newBadges: result.newBadges,
-    });
-  }
-
-  const updated = await prisma.pickup.update({
-    where: { id: req.params.id },
-    data: { status: data.status },
-    include: {
-      user: { select: { id: true, name: true, email: true, phone: true } },
-      assignedAdmin: { select: { id: true, name: true, role: true, email: true, phone: true } },
-    },
+  const { pickup, ledgerEntry, newBadges } = await transitionPickupStatus({
+    pickupId: req.params.id,
+    targetStatus: data.status,
+    user: req.user,
+    rejectionReason: data.rejectionReason,
+    wasteQuantity: data.wasteQuantity,
   });
-  res.json({ pickup: updated });
+
+  res.json({
+    pickup,
+    ...(ledgerEntry ? { pointsEarned: ledgerEntry.pointsEarned } : {}),
+    ...(newBadges ? { newBadges } : {}),
+  });
+});
+
+const reject = asyncHandler(async (req, res) => {
+  const rejectionReason =
+    req.body?.rejectionReason ||
+    req.body?.reason ||
+    "Request does not meet recycling or collection guidelines.";
+
+  const { pickup } = await transitionPickupStatus({
+    pickupId: req.params.id,
+    targetStatus: "rejected",
+    user: req.user,
+    rejectionReason,
+  });
+
+  res.json({ pickup, message: "Pickup request has been rejected." });
 });
 
 // Citizen personal environmental impact
@@ -302,4 +300,39 @@ const myImpact = asyncHandler(async (req, res) => {
   });
 });
 
-module.exports = { create, list, getById, assign, updateStatus, myImpact };
+const updateCoordinatesSchema = z.object({
+  latitude: z.number().min(-90).max(90),
+  longitude: z.number().min(-180).max(180),
+});
+
+/**
+ * PATCH /api/admin/pickups/:id/coordinates or PATCH /api/pickups/:id/coordinates
+ * Admin endpoint to set/correct latitude and longitude for pickups missing coordinates.
+ */
+const updateCoordinates = asyncHandler(async (req, res) => {
+  const { id } = req.params;
+  const { latitude, longitude } = updateCoordinatesSchema.parse(req.body);
+
+  const pickup = await prisma.pickup.findUnique({ where: { id } });
+  if (!pickup) throw new HttpError(404, "Pickup not found");
+
+  const isAdmin = req.user.role === "admin";
+  const isOwner = req.user.role === "citizen" && pickup.userId === req.user.id;
+
+  if (!isAdmin && (!isOwner || pickup.status !== "requested")) {
+    throw new HttpError(
+      403,
+      "Forbidden: Coordinates can only be modified by administrators, or by the citizen owner while the pickup is still in 'requested' status"
+    );
+  }
+
+  const updated = await prisma.pickup.update({
+    where: { id },
+    data: { latitude, longitude },
+  });
+
+  res.json({ pickup: updated, message: "Pickup destination coordinates updated successfully" });
+});
+
+module.exports = { create, list, getById, assign, updateStatus, reject, myImpact, updateCoordinates };
+

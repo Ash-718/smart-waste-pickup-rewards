@@ -27,6 +27,10 @@ function errorHandler(err, req, res, next) {
     return res.status(409).json({ error: "That conflicted with another update — please try again" });
   }
 
+  if (err.code === "LIMIT_FILE_SIZE") {
+    return res.status(413).json({ error: "File too large. Maximum allowed size is 10MB." });
+  }
+
   if (err.name === "MulterError" || (err.message && err.message.startsWith("Only image uploads"))) {
     return res.status(400).json({ error: err.message });
   }

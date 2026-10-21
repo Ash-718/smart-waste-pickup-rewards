@@ -1,12 +1,15 @@
 import { useQuery } from "@tanstack/react-query";
 import { ActivityIndicator, Image, StyleSheet, Text, View } from "react-native";
+import { Ionicons } from "@expo/vector-icons";
 import Screen from "../components/Screen";
 import Card from "../components/Card";
+import Button from "../components/Button";
 import StatusBadge from "../components/StatusBadge";
 import ErrorState from "../components/ErrorState";
 import { useMeta } from "../hooks/useMeta";
 import { getPickup } from "../api/pickups";
 import { colors } from "../theme/colors";
+import { getMediaUrl } from "../lib/apiClient";
 
 function Row({ label, value }) {
   return (
@@ -17,7 +20,7 @@ function Row({ label, value }) {
   );
 }
 
-export default function PickupDetailScreen({ route }) {
+export default function PickupDetailScreen({ route, navigation }) {
   const { id } = route.params;
   const { wasteTypeLabel, quantityBandLabel, slotPeriodLabel } = useMeta();
 
@@ -57,7 +60,10 @@ export default function PickupDetailScreen({ route }) {
 
         {pickup.status === "rejected" && (
           <View style={styles.rejectionCard}>
-            <Text style={styles.rejectionTitle}>⚠️ Rejection Reason</Text>
+            <View style={{ flexDirection: "row", alignItems: "center", marginBottom: 6 }}>
+              <Ionicons name="alert-circle" size={18} color={colors.warning700 || "#b45309"} style={{ marginRight: 6 }} />
+              <Text style={styles.rejectionTitle}>Rejection Reason</Text>
+            </View>
             <Text style={styles.rejectionBody}>
               {pickup.rejectionReason || "No specific reason provided."}
             </Text>
@@ -90,9 +96,17 @@ export default function PickupDetailScreen({ route }) {
         )}
 
         {pickup.photoUrl && (
-          <Image source={{ uri: pickup.photoUrl }} style={styles.photo} resizeMode="cover" />
+          <Image source={{ uri: getMediaUrl(pickup.photoUrl) }} style={styles.photo} resizeMode="cover" />
         )}
       </Card>
+
+      {["assigned", "on_the_way", "arrived"].includes(pickup.status) && (
+        <Button
+          title="Track Live Vehicle"
+          onPress={() => navigation.navigate("TrackPickup", { pickupId: pickup.id })}
+          style={{ marginTop: 16 }}
+        />
+      )}
     </Screen>
   );
 }

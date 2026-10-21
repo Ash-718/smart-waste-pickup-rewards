@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   ActivityIndicator,
+  Alert,
   Image,
   Platform,
   Pressable,
@@ -10,6 +11,9 @@ import {
   View,
 } from "react-native";
 import * as ImagePicker from "expo-image-picker";
+import * as ImageManipulator from "expo-image-manipulator";
+import * as Location from "expo-location";
+import { Ionicons } from "@expo/vector-icons";
 import DateTimePicker from "@react-native-community/datetimepicker";
 import Screen from "../components/Screen";
 import ChipSelector from "../components/ChipSelector";
@@ -32,6 +36,8 @@ export default function BookPickupScreen({ navigation }) {
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [photoUrl, setPhotoUrl] = useState(null);
   const [photoPreviewUri, setPhotoPreviewUri] = useState(null);
+  const [coordinates, setCoordinates] = useState(null);
+  const [locating, setLocating] = useState(false);
   const [error, setError] = useState(null);
 
   const uploadMutation = useMutation({ mutationFn: uploadPickupPhoto });
@@ -43,17 +49,15 @@ export default function BookPickupScreen({ navigation }) {
     },
   });
 
-  async function processSelectedAsset(asset) {
+  const [selectedAsset, setSelectedAsset] = useState(null);
+  const [isUploadingPhoto, setIsUploadingPhoto] = useState(false);
+  const [uploadProgressText, setUploadProgressText] = useState("Uploading photo...");
+
+  function processSelectedAsset(asset) {
+    setSelectedAsset(asset);
     setPhotoPreviewUri(asset.uri);
     setPhotoUrl(null);
     setError(null);
-
-    try {
-      const uploaded = await uploadMutation.mutateAsync(asset);
-      setPhotoUrl(uploaded.photoUrl);
-    } catch (err) {
-      setError(err.message || "Failed to upload photo. You can try retaking it.");
-    }
   }
 
   async function handleTakePhoto() {
@@ -68,11 +72,11 @@ export default function BookPickupScreen({ navigation }) {
       const result = await ImagePicker.launchCameraAsync({
         mediaTypes: ["images"],
         quality: 0.7,
-        allowsEditing: true,
+        allowsEditing: false,
       });
 
       if (result.canceled || !result.assets?.length) return;
-      await processSelectedAsset(result.assets[0]);
+      processSelectedAsset(result.assets[0]);
     } catch (err) {
       setError("Unable to open camera: " + err.message);
     }
@@ -90,39 +94,209 @@ export default function BookPickupScreen({ navigation }) {
       const result = await ImagePicker.launchImageLibraryAsync({
         mediaTypes: ["images"],
         quality: 0.7,
-        allowsEditing: true,
+        allowsEditing: false,
       });
 
       if (result.canceled || !result.assets?.length) return;
-      await processSelectedAsset(result.assets[0]);
+      processSelectedAsset(result.assets[0]);
     } catch (err) {
       setError("Unable to open gallery: " + err.message);
     }
   }
 
   function handleRemovePhoto() {
+    setSelectedAsset(null);
     setPhotoPreviewUri(null);
     setPhotoUrl(null);
   }
 
-  function handleSubmit() {
+  async function handleDetectLocation() {
+    setLocating(true);
     setError(null);
-    if (!wasteType) return setError("Choose a waste type");
-    if (!quantityBand) return setError("Choose a quantity");
-    if (!slotPeriod) return setError("Choose a pickup slot");
-    if (!address.trim()) return setError("Address is required");
+    try {
+      const { status } = await Location.requestForegroundPermissionsAsync();
+      if (status !== "granted") {
+        setError("Location permission denied. Please enter address manually.");
+        setLocating(false);
+        return;
+      }
+      const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.High });
+      if (loc?.coords) {
+        const coords = {
+          latitude: parseFloat(loc.coords.latitude.toFixed(6)),
+          longitude: parseFloat(loc.coords.longitude.toFixed(6)),
+        };
+        setCoordinates(coords);
 
+        // Autofill address via reverse geocoding if empty
+        if (!address.trim()) {
+          try {
+            const geocoded = await Location.reverseGeocodeAsync({
+              latitude: loc.coords.latitude,
+              longitude: loc.coords.longitude,
+            });
+            if (geocoded && geocoded.length > 0) {
+              const g = geocoded[0];
+              const parts = [g.name, g.street, g.subregion || g.district, g.city, g.postalCode].filter(
+                Boolean
+              );
+              if (parts.length > 0) {
+                setAddress(parts.join(", "));
+              }
+            }
+          } catch (geoErr) {
+            // Geocoding optional; coordinates already saved
+          }
+        }
+      }
+    } catch (err) {
+      setError("Unable to get current GPS location: " + err.message);
+    } finally {
+      setLocating(false);
+    }
+  }
+
+  async function resolveAddressToCoordinates(addr) {
+    // 1. Try native geocoding via expo-location
+    try {
+      const results = await Location.geocodeAsync(addr);
+      if (results && results.length > 0 && results[0].latitude && results[0].longitude) {
+        return {
+          latitude: parseFloat(results[0].latitude.toFixed(6)),
+          longitude: parseFloat(results[0].longitude.toFixed(6)),
+        };
+      }
+    } catch (e) {
+      // Fall through to Nominatim
+    }
+
+    // 2. Try OpenStreetMap Nominatim with proper User-Agent
+    const contactEmail = process.env.EXPO_PUBLIC_CONTACT_EMAIL || "support@pruthvi.ngo";
+    try {
+      const res = await fetch(
+        `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(addr)}&limit=1`,
+        {
+          headers: {
+            "User-Agent": `WasteWise-App/1.0 (${contactEmail})`,
+            Accept: "application/json",
+          },
+        }
+      );
+      if (res.ok) {
+        const data = await res.json();
+        if (data && data.length > 0 && data[0].lat && data[0].lon) {
+          return {
+            latitude: parseFloat(parseFloat(data[0].lat).toFixed(6)),
+            longitude: parseFloat(parseFloat(data[0].lon).toFixed(6)),
+          };
+        }
+      }
+    } catch (e) {
+      // Nominatim failed or offline
+    }
+
+    return null;
+  }
+
+  function sendCreateRequest(finalCoords, finalPhotoUrl) {
     createMutation.mutate({
       wasteType,
       quantityBand,
       slotPeriod,
       address: address.trim(),
       requestedDate: requestedDate.toISOString(),
-      ...(photoUrl ? { photoUrl } : {}),
+      ...(finalPhotoUrl ? { photoUrl: finalPhotoUrl } : {}),
+      latitude: finalCoords.latitude,
+      longitude: finalCoords.longitude,
     });
   }
 
-  const submitting = createMutation.isPending;
+  async function handleSubmit() {
+    setError(null);
+    if (!wasteType) return setError("Choose a waste type");
+    if (!quantityBand) return setError("Choose a quantity");
+    if (!slotPeriod) return setError("Choose a pickup slot");
+    if (!address.trim()) return setError("Address is required");
+
+    let finalCoords = coordinates;
+    if (!finalCoords) {
+      setLocating(true);
+      finalCoords = await resolveAddressToCoordinates(address.trim());
+      setLocating(false);
+      if (finalCoords) {
+        setCoordinates(finalCoords);
+      } else {
+        return setError(
+          "Could not determine GPS coordinates for this address. Please tap 'Use Current GPS Location' above to pinpoint your pickup location."
+        );
+      }
+    }
+
+    let uploadedPhotoUrl = photoUrl;
+    if (selectedAsset && !uploadedPhotoUrl) {
+      setIsUploadingPhoto(true);
+      let assetToUpload = selectedAsset;
+
+      try {
+        setUploadProgressText("Compressing image...");
+        const manipResult = await ImageManipulator.manipulateAsync(
+          selectedAsset.uri,
+          [{ resize: { width: 1280 } }],
+          { compress: 0.7, format: ImageManipulator.SaveFormat.JPEG }
+        );
+        assetToUpload = {
+          ...selectedAsset,
+          uri: manipResult.uri,
+          type: "image/jpeg",
+          name: selectedAsset.name?.replace(/\.[^/.]+$/, ".jpg") || "pickup_photo.jpg",
+        };
+      } catch (compErr) {
+        // Fall back to original asset if manipulation fails
+      }
+
+      try {
+        setUploadProgressText("Uploading photo...");
+        const uploadRes = await uploadMutation.mutateAsync(assetToUpload);
+        uploadedPhotoUrl = uploadRes.photoUrl;
+        setPhotoUrl(uploadedPhotoUrl);
+      } catch (uploadErr) {
+        setIsUploadingPhoto(false);
+        const errorDetail = uploadErr?.message || "Upload failed";
+        setError(`Photo upload failed: ${errorDetail}`);
+        Alert.alert(
+          "Photo Upload Failed",
+          `${errorDetail}\n\nPhoto is optional. Would you like to retry or continue without the photo?`,
+          [
+            {
+              text: "Retry",
+              onPress: () => handleSubmit(),
+            },
+            {
+              text: "Continue Without Photo",
+              onPress: () => {
+                setSelectedAsset(null);
+                setPhotoPreviewUri(null);
+                setPhotoUrl(null);
+                setError(null);
+                sendCreateRequest(finalCoords, null);
+              },
+            },
+            {
+              text: "Cancel",
+              style: "cancel",
+            },
+          ]
+        );
+        return;
+      } finally {
+        setIsUploadingPhoto(false);
+      }
+    }
+
+    sendCreateRequest(finalCoords, uploadedPhotoUrl);
+  }
+
+  const submitting = createMutation.isPending || isUploadingPhoto;
 
   return (
     <Screen>
@@ -152,6 +326,47 @@ export default function BookPickupScreen({ navigation }) {
         multiline
         placeholder="House / street / area"
       />
+
+      {/* GPS Location Pinning Button & Indicator */}
+      <View style={{ marginBottom: 16 }}>
+        <Pressable
+          onPress={handleDetectLocation}
+          disabled={locating}
+          style={{
+            flexDirection: "row",
+            alignItems: "center",
+            alignSelf: "flex-start",
+            paddingHorizontal: 12,
+            paddingVertical: 7,
+            borderRadius: 8,
+            backgroundColor: coordinates ? colors.brand50 : colors.neutral100,
+            borderWidth: 1,
+            borderColor: coordinates ? colors.brand200 : colors.neutral200,
+          }}
+        >
+          {locating ? (
+            <ActivityIndicator size="small" color={colors.brand700} style={{ marginRight: 6 }} />
+          ) : (
+            <Ionicons
+              name={coordinates ? "location" : "location-outline"}
+              size={16}
+              color={coordinates ? colors.brand700 : colors.neutral600}
+              style={{ marginRight: 6 }}
+            />
+          )}
+          <Text
+            style={{
+              fontSize: 12,
+              fontWeight: "600",
+              color: coordinates ? colors.brand800 : colors.neutral700,
+            }}
+          >
+            {coordinates
+              ? `GPS Attached (${coordinates.latitude.toFixed(4)}, ${coordinates.longitude.toFixed(4)})`
+              : "Use Current GPS Location"}
+          </Text>
+        </Pressable>
+      </View>
 
       <View style={styles.field}>
         <Text style={styles.label}>Pickup date</Text>
@@ -191,49 +406,36 @@ export default function BookPickupScreen({ navigation }) {
         {photoPreviewUri ? (
           <View style={styles.previewContainer}>
             <Image source={{ uri: photoPreviewUri }} style={styles.photo} resizeMode="cover" />
-            {uploadMutation.isPending && (
+            {isUploadingPhoto && (
               <View style={styles.photoOverlay}>
                 <ActivityIndicator color={colors.white} />
-                <Text style={styles.uploadingText}>Uploading photo…</Text>
+                <Text style={styles.uploadingText}>{uploadProgressText}</Text>
               </View>
             )}
             <View style={styles.photoActionRow}>
               <Pressable
-                style={[styles.smallBtn, styles.retakeBtn]}
-                onPress={handleTakePhoto}
-                disabled={uploadMutation.isPending}
-              >
-                <Text style={styles.smallBtnText}>📷 Retake</Text>
-              </Pressable>
-              <Pressable
-                style={[styles.smallBtn, styles.galleryBtn]}
-                onPress={handlePickGallery}
-                disabled={uploadMutation.isPending}
-              >
-                <Text style={styles.smallBtnText}>🖼️ Choose Other</Text>
-              </Pressable>
-              <Pressable
                 style={[styles.smallBtn, styles.removeBtn]}
                 onPress={handleRemovePhoto}
-                disabled={uploadMutation.isPending}
+                disabled={isUploadingPhoto}
               >
-                <Text style={[styles.smallBtnText, styles.removeBtnText]}>🗑️ Remove</Text>
+                <Ionicons name="trash-outline" size={15} color={colors.red600} style={{ marginRight: 4 }} />
+                <Text style={[styles.smallBtnText, styles.removeBtnText]}>Remove Photo</Text>
               </Pressable>
             </View>
             {photoUrl && (
-              <Text style={styles.uploadedBadge}>✓ Photo uploaded & attached successfully</Text>
+              <Text style={styles.uploadedBadge}>✓ Photo attached</Text>
             )}
           </View>
         ) : (
           <View style={styles.photoOptionsGrid}>
             <Pressable style={styles.photoOptionBox} onPress={handleTakePhoto}>
-              <Text style={styles.photoOptionIcon}>📷</Text>
+              <Ionicons name="camera-outline" size={26} color={colors.brand700} style={{ marginBottom: 4 }} />
               <Text style={styles.photoOptionTitle}>Take Photo</Text>
               <Text style={styles.photoOptionSubtitle}>Use device camera</Text>
             </Pressable>
 
             <Pressable style={styles.photoOptionBox} onPress={handlePickGallery}>
-              <Text style={styles.photoOptionIcon}>🖼️</Text>
+              <Ionicons name="images-outline" size={26} color={colors.brand700} style={{ marginBottom: 4 }} />
               <Text style={styles.photoOptionTitle}>Upload from Gallery</Text>
               <Text style={styles.photoOptionSubtitle}>Choose existing image</Text>
             </Pressable>

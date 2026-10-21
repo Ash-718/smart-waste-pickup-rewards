@@ -3,6 +3,7 @@ import { NavigationContainer } from "@react-navigation/native";
 import { useAuth } from "../context/AuthContext";
 import AuthNavigator from "./AuthNavigator";
 import AppNavigator from "./AppNavigator";
+import DriverNavigator from "./DriverNavigator";
 import { colors } from "../theme/colors";
 
 export default function RootNavigator() {
@@ -16,7 +17,17 @@ export default function RootNavigator() {
     );
   }
 
-  return <NavigationContainer>{user ? <AppNavigator /> : <AuthNavigator />}</NavigationContainer>;
+  return (
+    <NavigationContainer>
+      {!user ? (
+        <AuthNavigator />
+      ) : user.role === "collector" ? (
+        <DriverNavigator />
+      ) : (
+        <AppNavigator />
+      )}
+    </NavigationContainer>
+  );
 }
 
 const styles = StyleSheet.create({

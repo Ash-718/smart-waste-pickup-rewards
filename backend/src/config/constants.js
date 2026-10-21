@@ -22,7 +22,15 @@ const SLOT_PERIODS = [
   { value: "EVENING", label: "Evening (4-7 PM)" },
 ];
 
-const PICKUP_STATUSES = ["requested", "assigned", "completed", "cancelled", "rejected"];
+const PICKUP_STATUSES = [
+  "requested",
+  "assigned",
+  "on_the_way",
+  "arrived",
+  "completed",
+  "cancelled",
+  "rejected",
+];
 
 const ESTIMATED_KG_FOR_BAND = {
   SMALL: 1.5,

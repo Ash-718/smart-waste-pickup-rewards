@@ -1,8 +1,46 @@
+# Dependencies
 node_modules/
+.pnp
+.pnp.js
+
+# Environment and secrets
 .env
-.env.local
+.env.*
+!.env.example
+*.pem
+*.key
+*.cert
+
+# Database backups & dumps
+*.dump
+*.bak
+*.backup
+*.tmp
+*.sql
+!**/migrations/**/*.sql
+
+# Production builds
 dist/
+dist-ssr/
 build/
 .expo/
+web-build/
+
+# Logs
 *.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# System & IDE files
 .DS_Store
+Thumbs.db
+.idea/
+.vscode/*
+!.vscode/extensions.json
+*.suo
+*.sw?
+
+# Uploaded files
+backend/uploads/
+uploads/

@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import { Pressable, StyleSheet, Text, View, TouchableOpacity } from "react-native";
+import { Ionicons } from "@expo/vector-icons";
 import Screen from "../components/Screen";
 import Card from "../components/Card";
 import Button from "../components/Button";
@@ -77,8 +78,9 @@ export default function MyPickupsScreen({ navigation }) {
 
             {pickup.status === "assigned" && pickup.assignedAdmin && (
               <View style={styles.assignedSnippet}>
+                <Ionicons name="person-outline" size={14} color={colors.brand700} style={{ marginRight: 4 }} />
                 <Text style={styles.assignedSnippetText} numberOfLines={1}>
-                  👷 Collector: {pickup.assignedAdmin.name}
+                  Collector: {pickup.assignedAdmin.name}
                 </Text>
               </View>
             )}
@@ -89,6 +91,16 @@ export default function MyPickupsScreen({ navigation }) {
                   Reason: {pickup.rejectionReason}
                 </Text>
               </View>
+            )}
+
+            {["assigned", "on_the_way", "arrived"].includes(pickup.status) && (
+              <TouchableOpacity
+                style={styles.trackLiveBtn}
+                onPress={() => navigation.navigate("TrackPickup", { pickupId: pickup.id })}
+              >
+                <Ionicons name="navigate-outline" size={15} color={colors.white} style={{ marginRight: 6 }} />
+                <Text style={styles.trackLiveBtnText}>Track Live Vehicle</Text>
+              </TouchableOpacity>
             )}
           </Card>
         </Pressable>
@@ -189,5 +201,21 @@ const styles = StyleSheet.create({
     color: colors.red700,
     fontSize: 12,
     fontWeight: "500",
+  },
+  trackLiveBtn: {
+    backgroundColor: colors.brand50,
+    borderColor: colors.brand600,
+    borderWidth: 1,
+    borderRadius: 10,
+    marginTop: 10,
+    paddingVertical: 8,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  trackLiveBtnText: {
+    color: colors.brand700,
+    fontSize: 13,
+    fontWeight: "700",
   },
 });

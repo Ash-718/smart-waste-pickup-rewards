@@ -2,13 +2,20 @@ import { useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { getPickup, updatePickupStatus } from "../api/pickups";
+import { updatePickupCoordinates } from "../api/admin";
+import { getMediaUrl } from "../lib/apiClient";
 import { useMeta } from "../hooks/useMeta";
 import StatusBadge from "../components/StatusBadge";
 import ErrorState from "../components/ErrorState";
 import { CardSkeleton } from "../components/Skeleton";
-import AssignCollectorModal from "../components/AssignCollectorModal";
+import AssignVehicleModal from "../components/AssignVehicleModal";
 import RejectPickupModal from "../components/RejectPickupModal";
 import UserProfileModal from "../components/UserProfileModal";
+
+function stripCollectorSuffix(name) {
+  if (!name) return "";
+  return name.replace(/\s*\(Fleet Collector\)/gi, "").trim();
+}
 
 export default function PickupDetailPage() {
   const { id } = useParams();
@@ -22,6 +29,11 @@ export default function PickupDetailPage() {
   const [showUserModal, setShowUserModal] = useState(false);
   const [measuredWeight, setMeasuredWeight] = useState("");
   const [isCompleting, setIsCompleting] = useState(false);
+  const [isGeocoding, setIsGeocoding] = useState(false);
+  const [coordError, setCoordError] = useState(null);
+  const [showManualCoords, setShowManualCoords] = useState(false);
+  const [manualLat, setManualLat] = useState("");
+  const [manualLng, setManualLng] = useState("");
 
   const { data, isLoading, isError, error, refetch } = useQuery({
     queryKey: ["pickup", id],
@@ -67,6 +79,54 @@ export default function PickupDetailPage() {
     });
   }
 
+  async function handleGeocodeAddress() {
+    setIsGeocoding(true);
+    setCoordError(null);
+    const contactEmail = import.meta.env.VITE_CONTACT_EMAIL || "support@pruthvi.ngo";
+    try {
+      const res = await fetch(
+        `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(
+          pickup.address
+        )}&limit=1`,
+        {
+          headers: { "User-Agent": `WasteWise-App/1.0 (${contactEmail})` },
+        }
+      );
+      if (!res.ok) throw new Error("Geocoding service unavailable");
+      const data = await res.json();
+      if (!data || data.length === 0) {
+        throw new Error("Could not find coordinates for this address. Set manually.");
+      }
+      const lat = parseFloat(parseFloat(data[0].lat).toFixed(6));
+      const lng = parseFloat(parseFloat(data[0].lon).toFixed(6));
+      await updatePickupCoordinates(pickup.id, { latitude: lat, longitude: lng });
+      queryClient.invalidateQueries({ queryKey: ["pickup", id] });
+      setFeedback("Coordinates updated successfully via geocoding.");
+    } catch (err) {
+      setCoordError(err.message);
+    } finally {
+      setIsGeocoding(false);
+    }
+  }
+
+  async function handleSaveManualCoords(e) {
+    e.preventDefault();
+    setCoordError(null);
+    const lat = parseFloat(manualLat);
+    const lng = parseFloat(manualLng);
+    if (isNaN(lat) || isNaN(lng) || lat < -90 || lat > 90 || lng < -180 || lng > 180) {
+      return setCoordError("Invalid coordinates. Latitude must be -90..90, Longitude -180..180.");
+    }
+    try {
+      await updatePickupCoordinates(pickup.id, { latitude: lat, longitude: lng });
+      setShowManualCoords(false);
+      queryClient.invalidateQueries({ queryKey: ["pickup", id] });
+      setFeedback("Coordinates updated successfully.");
+    } catch (err) {
+      setCoordError(err.message);
+    }
+  }
+
   return (
     <div className="max-w-3xl space-y-4">
       <button
@@ -106,15 +166,21 @@ export default function PickupDetailPage() {
               <>
                 <button
                   onClick={() => setShowAssignModal(true)}
-                  className="rounded-xl border border-emerald-300 bg-emerald-50 px-3.5 py-2 text-xs font-semibold text-emerald-800 hover:bg-emerald-100"
+                  className={`rounded-xl px-3.5 py-2 text-xs font-semibold flex items-center gap-1.5 transition ${
+                    pickup.status === "requested"
+                      ? "bg-emerald-600 text-white hover:bg-emerald-700 shadow-xs"
+                      : "border border-emerald-300 bg-emerald-50 text-emerald-800 hover:bg-emerald-100"
+                  }`}
                 >
-                  {pickup.status === "assigned" ? "Reassign Collector" : "Assign Collector"}
+                  <span>🚛</span>
+                  <span>{pickup.status === "assigned" ? "Reassign Vehicle" : "Assign Staff & Vehicle"}</span>
                 </button>
                 <button
                   onClick={() => setShowRejectModal(true)}
-                  className="rounded-xl border border-rose-300 bg-rose-50 px-3.5 py-2 text-xs font-semibold text-rose-700 hover:bg-rose-100"
+                  className="rounded-xl border border-rose-300 bg-rose-50 px-3.5 py-2 text-xs font-semibold text-rose-700 hover:bg-rose-100 flex items-center gap-1.5 transition shadow-2xs"
                 >
-                  Reject with Reason
+                  <span>✕</span>
+                  <span>Reject Pickup</span>
                 </button>
               </>
             )}
@@ -159,11 +225,45 @@ export default function PickupDetailPage() {
           </div>
 
           <div className="rounded-xl bg-neutral-50 p-3">
-            <dt className="font-semibold uppercase tracking-wider text-neutral-500">Assigned Collector / Staff</dt>
+            <dt className="font-semibold uppercase tracking-wider text-neutral-500">Assigned Fleet Vehicle</dt>
+            <dd className="mt-1 text-sm font-bold text-neutral-900">
+              {pickup.assignments?.[0]?.vehicle ? (
+                pickup.assignments[0].vehicle.registrationNo === "LEGACY-UNASSIGNED" ? (
+                  <span className="inline-flex items-center px-2 py-0.5 rounded-md text-xs font-semibold bg-amber-50 text-amber-800 border border-amber-200">
+                    Needs vehicle
+                  </span>
+                ) : (
+                  <>
+                    <span className="flex items-center gap-1.5 text-emerald-800">
+                      <span>🚛</span>
+                      <span>{pickup.assignments[0].vehicle.registrationNo}</span>
+                    </span>
+                    <span className="block text-xs font-normal text-neutral-500 mt-0.5">
+                      {pickup.assignments[0].vehicle.type} ({pickup.assignments[0].vehicle.capacity}kg)
+                    </span>
+                  </>
+                )
+              ) : (
+                <span className="text-neutral-400 font-normal italic">No fleet vehicle assigned</span>
+              )}
+            </dd>
+          </div>
+
+          <div className="rounded-xl bg-neutral-50 p-3">
+            <dt className="font-semibold uppercase tracking-wider text-neutral-500">Assigned Driver / Staff</dt>
             <dd className="mt-1 text-sm font-bold text-blue-900">
-              {pickup.assignedAdmin ? (
+              {pickup.assignments?.[0]?.vehicle?.driver ? (
                 <>
-                  {pickup.assignedAdmin.name} ({pickup.assignedAdmin.role})
+                  {stripCollectorSuffix(pickup.assignments[0].vehicle.driver.name)}
+                  {pickup.assignments[0].vehicle.driver.phone && (
+                    <span className="block text-xs font-normal text-neutral-500">
+                      Phone: {pickup.assignments[0].vehicle.driver.phone}
+                    </span>
+                  )}
+                </>
+              ) : pickup.assignedAdmin ? (
+                <>
+                  {stripCollectorSuffix(pickup.assignedAdmin.name)} ({pickup.assignedAdmin.role})
                   {pickup.assignedAt && (
                     <span className="block text-xs font-normal text-neutral-500">
                       Assigned on {new Date(pickup.assignedAt).toLocaleDateString()}
@@ -177,8 +277,78 @@ export default function PickupDetailPage() {
           </div>
 
           <div className="col-span-full rounded-xl bg-neutral-50 p-3">
-            <dt className="font-semibold uppercase tracking-wider text-neutral-500">Collection Address</dt>
+            <div className="flex items-center justify-between">
+              <dt className="font-semibold uppercase tracking-wider text-neutral-500">Collection Address & GPS</dt>
+              {pickup.latitude != null && pickup.longitude != null ? (
+                <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-semibold text-emerald-800">
+                  📍 {pickup.latitude.toFixed(5)}, {pickup.longitude.toFixed(5)}
+                </span>
+              ) : (
+                <span className="inline-flex items-center gap-1 rounded-full bg-rose-100 px-2 py-0.5 text-xs font-semibold text-rose-800">
+                  ⚠️ No Coordinates
+                </span>
+              )}
+            </div>
             <dd className="mt-1 text-sm font-medium text-neutral-900">{pickup.address}</dd>
+
+            {/* Coordinates missing warning & admin fix tools */}
+            {(pickup.latitude == null || pickup.longitude == null) && (
+              <div className="mt-2.5 rounded-lg border border-amber-200 bg-amber-50 p-2.5 text-xs">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <span className="font-semibold text-amber-800">
+                    Destination coordinates missing. Arrival check will be blocked until coordinates are set.
+                  </span>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      disabled={isGeocoding}
+                      onClick={handleGeocodeAddress}
+                      className="rounded-lg bg-emerald-700 px-2.5 py-1 text-xs font-semibold text-white hover:bg-emerald-800 disabled:opacity-50"
+                    >
+                      {isGeocoding ? "Geocoding..." : "Auto-Geocode Address"}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setShowManualCoords(!showManualCoords)}
+                      className="rounded-lg border border-neutral-300 bg-white px-2.5 py-1 text-xs font-semibold text-neutral-700 hover:bg-neutral-50"
+                    >
+                      {showManualCoords ? "Cancel" : "Set Manually"}
+                    </button>
+                  </div>
+                </div>
+
+                {coordError && <p className="mt-1 text-rose-600 font-medium">{coordError}</p>}
+
+                {showManualCoords && (
+                  <form onSubmit={handleSaveManualCoords} className="mt-2.5 flex flex-wrap items-center gap-2">
+                    <input
+                      type="number"
+                      step="any"
+                      placeholder="Latitude (e.g. 19.076)"
+                      value={manualLat}
+                      onChange={(e) => setManualLat(e.target.value)}
+                      className="rounded border border-neutral-300 bg-white px-2 py-1 text-xs text-neutral-900"
+                      required
+                    />
+                    <input
+                      type="number"
+                      step="any"
+                      placeholder="Longitude (e.g. 72.877)"
+                      value={manualLng}
+                      onChange={(e) => setManualLng(e.target.value)}
+                      className="rounded border border-neutral-300 bg-white px-2 py-1 text-xs text-neutral-900"
+                      required
+                    />
+                    <button
+                      type="submit"
+                      className="rounded bg-blue-600 px-3 py-1 font-semibold text-white hover:bg-blue-700"
+                    >
+                      Save Coordinates
+                    </button>
+                  </form>
+                )}
+              </div>
+            )}
           </div>
 
           {pickup.pointsLedgerEntry && (
@@ -198,7 +368,7 @@ export default function PickupDetailPage() {
               Citizen Photo Upload
             </h3>
             <img
-              src={pickup.photoUrl}
+              src={getMediaUrl(pickup.photoUrl)}
               alt="Pickup item"
               className="h-56 w-full max-w-md rounded-xl object-cover ring-1 ring-neutral-200"
             />
@@ -253,6 +423,21 @@ export default function PickupDetailPage() {
             ) : (
               <div className="flex flex-wrap gap-2">
                 <button
+                  type="button"
+                  onClick={() => setShowAssignModal(true)}
+                  disabled={pickup.status === "on_the_way" || pickup.status === "arrived"}
+                  className={`rounded-xl px-4 py-2 text-xs font-semibold shadow-xs transition ${
+                    pickup.status === "on_the_way" || pickup.status === "arrived"
+                      ? "bg-neutral-100 text-neutral-400 border border-neutral-200 cursor-not-allowed"
+                      : "border border-emerald-300 bg-emerald-50 text-emerald-800 hover:bg-emerald-100"
+                  }`}
+                >
+                  {pickup.assignments?.[0]?.vehicle || pickup.assignedAdmin
+                    ? "🔄 Reassign Vehicle & Driver"
+                    : "🚛 Assign Vehicle & Driver"}
+                </button>
+
+                <button
                   onClick={() => setIsCompleting(true)}
                   className="rounded-xl bg-emerald-600 px-4 py-2 text-xs font-semibold text-white hover:bg-emerald-700 shadow-xs"
                 >
@@ -281,7 +466,7 @@ export default function PickupDetailPage() {
 
       {/* Modals */}
       {showAssignModal && (
-        <AssignCollectorModal
+        <AssignVehicleModal
           pickup={pickup}
           onClose={() => setShowAssignModal(false)}
           onAssigned={() => refetch()}

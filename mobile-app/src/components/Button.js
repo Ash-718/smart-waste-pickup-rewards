@@ -1,4 +1,4 @@
-import { ActivityIndicator, Pressable, StyleSheet, Text } from "react-native";
+import { ActivityIndicator, Pressable, StyleSheet, Text, View } from "react-native";
 import { colors } from "../theme/colors";
 
 const VARIANTS = {
@@ -7,8 +7,25 @@ const VARIANTS = {
   danger: { bg: "transparent", text: colors.red600, border: colors.red600 },
 };
 
-export default function Button({ title, onPress, variant = "primary", disabled, loading }) {
-  const v = VARIANTS[variant];
+export default function Button({
+  title,
+  label,
+  children,
+  icon,
+  onPress,
+  variant = "primary",
+  disabled,
+  loading,
+  style,
+  textStyle,
+}) {
+  const v = VARIANTS[variant] || VARIANTS.primary;
+  const displayText =
+    title ||
+    label ||
+    (typeof children === "string" ? children : null) ||
+    "Action";
+
   return (
     <Pressable
       onPress={onPress}
@@ -16,6 +33,7 @@ export default function Button({ title, onPress, variant = "primary", disabled, 
       style={({ pressed }) => [
         styles.button,
         { backgroundColor: v.bg, borderColor: v.border },
+        style,
         (disabled || loading) && styles.disabled,
         pressed && !disabled && !loading && styles.pressed,
       ]}
@@ -23,7 +41,12 @@ export default function Button({ title, onPress, variant = "primary", disabled, 
       {loading ? (
         <ActivityIndicator color={v.text} />
       ) : (
-        <Text style={[styles.text, { color: v.text }]}>{title}</Text>
+        <View style={styles.contentRow}>
+          {icon ? <View style={styles.iconWrapper}>{icon}</View> : null}
+          <Text style={[styles.text, { color: v.text }, textStyle]}>
+            {displayText}
+          </Text>
+        </View>
       )}
     </Pressable>
   );
@@ -36,10 +59,20 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     justifyContent: "center",
     paddingVertical: 14,
+    paddingHorizontal: 16,
+  },
+  contentRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  iconWrapper: {
+    marginRight: 8,
   },
   text: {
     fontSize: 15,
     fontWeight: "600",
+    textAlign: "center",
   },
   disabled: {
     opacity: 0.6,

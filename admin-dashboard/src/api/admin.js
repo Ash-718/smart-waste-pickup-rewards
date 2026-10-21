@@ -54,3 +54,34 @@ export function getBadges() {
 export function createBadge(data) {
   return apiFetch("/badges", { method: "POST", body: data });
 }
+
+// Fleet & Vehicle Management
+export function getLiveFleet() {
+  return apiFetch("/admin/vehicles/live");
+}
+
+export function getVehicles() {
+  return apiFetch("/admin/vehicles");
+}
+
+export function createVehicle(data) {
+  return apiFetch("/admin/vehicles", { method: "POST", body: data });
+}
+
+export function updateVehicle(id, data) {
+  return apiFetch(`/admin/vehicles/${id}`, { method: "PATCH", body: data });
+}
+
+export function deleteVehicle(id) {
+  return apiFetch(`/admin/vehicles/${id}`, { method: "DELETE" });
+}
+
+export function assignVehicleToPickup(pickupId, data) {
+  return apiFetch(`/admin/pickups/${pickupId}/assign`, { method: "POST", body: data });
+}
+
+export function updatePickupCoordinates(pickupId, data) {
+  return apiFetch(`/admin/pickups/${pickupId}/coordinates`, { method: "PATCH", body: data });
+}
+
+

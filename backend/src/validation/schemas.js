@@ -33,6 +33,48 @@ const loginSchema = z
     path: ["email"],
   });
 
+function getAllowedPhotoHosts() {
+  return (process.env.PHOTO_ALLOWED_HOSTS || "res.cloudinary.com")
+    .split(",")
+    .map((h) => h.trim().toLowerCase())
+    .filter(Boolean);
+}
+
+const photoUrlValidator = z
+  .string()
+  .trim()
+  .refine(
+    (val) => {
+      if (!val) return true;
+
+      // Reject any encoded traversal attacks (%2e%2e, %2f, %5c)
+      if (/%2e/i.test(val) || /%2f/i.test(val) || /%5c/i.test(val) || val.includes("..")) {
+        return false;
+      }
+
+      // 1. Local relative upload path: only /uploads/<random filename> with valid extension
+      if (val.startsWith("/uploads/")) {
+        return /^\/uploads\/[a-zA-Z0-9_-]+\.(jpg|jpeg|png|webp)$/i.test(val);
+      }
+
+      // 2. Remote HTTPS URL: must have https protocol and hostname in PHOTO_ALLOWED_HOSTS allowlist
+      try {
+        const parsed = new URL(val);
+        if (parsed.protocol !== "https:") return false;
+
+        const allowedHosts = getAllowedPhotoHosts();
+        return allowedHosts.includes(parsed.hostname.toLowerCase());
+      } catch {
+        return false;
+      }
+    },
+    {
+      message:
+        'photoUrl must be a local path like "/uploads/<filename>.(jpg|png|webp)" or an https URL from an allowed host',
+    }
+  )
+  .optional();
+
 const createPickupSchema = z.object({
   wasteType: z.enum(wasteTypeValues),
   quantityBand: z.enum(quantityBandValues),
@@ -40,12 +82,15 @@ const createPickupSchema = z.object({
   address: z.string().trim().min(1, "Address is required"),
   slotPeriod: z.enum(slotPeriodValues),
   requestedDate: z.coerce.date(),
-  photoUrl: z.string().url().optional(),
+  photoUrl: photoUrlValidator,
+  latitude: z.number().min(-90).max(90).nullable().optional(),
+  longitude: z.number().min(-180).max(180).nullable().optional(),
 });
 
 const assignPickupSchema = z.object({
-  adminId: z.string().uuid().optional(),
+  vehicleId: z.string().uuid().optional(),
   collectorId: z.string().uuid().optional(),
+  adminId: z.string().uuid().optional(),
   slotPeriod: z.enum(slotPeriodValues).optional(),
   requestedDate: z.coerce.date().optional(),
 });
