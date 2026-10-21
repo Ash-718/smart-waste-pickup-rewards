@@ -135,6 +135,7 @@ const assign = asyncHandler(async (req, res) => {
   const { pickup, assignment } = await assignVehicleToPickup({
     pickupId: req.params.id,
     vehicleId,
+    collectorId: data.collectorId || data.adminId,
     adminUserId: req.user.id,
     slotPeriod: data.slotPeriod,
     requestedDate: data.requestedDate,
@@ -159,6 +160,22 @@ const updateStatus = asyncHandler(async (req, res) => {
     ...(ledgerEntry ? { pointsEarned: ledgerEntry.pointsEarned } : {}),
     ...(newBadges ? { newBadges } : {}),
   });
+});
+
+const reject = asyncHandler(async (req, res) => {
+  const rejectionReason =
+    req.body?.rejectionReason ||
+    req.body?.reason ||
+    "Request does not meet recycling or collection guidelines.";
+
+  const { pickup } = await transitionPickupStatus({
+    pickupId: req.params.id,
+    targetStatus: "rejected",
+    user: req.user,
+    rejectionReason,
+  });
+
+  res.json({ pickup, message: "Pickup request has been rejected." });
 });
 
 // Citizen personal environmental impact
@@ -317,5 +334,5 @@ const updateCoordinates = asyncHandler(async (req, res) => {
   res.json({ pickup: updated, message: "Pickup destination coordinates updated successfully" });
 });
 
-module.exports = { create, list, getById, assign, updateStatus, myImpact, updateCoordinates };
+module.exports = { create, list, getById, assign, updateStatus, reject, myImpact, updateCoordinates };
 

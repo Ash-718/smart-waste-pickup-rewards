@@ -73,7 +73,7 @@ const PORT = process.env.PORT || 4000;
 const server = http.createServer(app);
 initSocketServer(server);
 
-server.listen(PORT, () => console.log(`WasteWise API & Socket.IO listening on port ${PORT}`));
+server.listen(PORT, "0.0.0.0", () => console.log(`WasteWise API & Socket.IO listening on port ${PORT}`));
 
 app.server = server;
 module.exports = app;

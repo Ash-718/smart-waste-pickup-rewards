@@ -1,5 +1,5 @@
 const express = require("express");
-const { create, list, getById, assign, updateStatus, myImpact, updateCoordinates } = require("../controllers/pickupController");
+const { create, list, getById, assign, updateStatus, reject, myImpact, updateCoordinates } = require("../controllers/pickupController");
 const { requireAuth, requireRole } = require("../middleware/auth");
 
 const router = express.Router();
@@ -11,7 +11,11 @@ router.get("/", list);
 router.get("/my-impact", myImpact);
 router.get("/:id", getById);
 router.patch("/:id/assign", requireRole("admin"), assign);
+router.post("/:id/assign", requireRole("admin"), assign);
 router.patch("/:id/status", requireRole("admin"), updateStatus);
+router.post("/:id/status", requireRole("admin"), updateStatus);
+router.patch("/:id/reject", requireRole("admin"), reject);
+router.post("/:id/reject", requireRole("admin"), reject);
 router.patch("/:id/coordinates", updateCoordinates);
 
 module.exports = router;

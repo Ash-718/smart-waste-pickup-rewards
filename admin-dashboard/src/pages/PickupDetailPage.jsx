@@ -166,15 +166,21 @@ export default function PickupDetailPage() {
               <>
                 <button
                   onClick={() => setShowAssignModal(true)}
-                  className="rounded-xl border border-emerald-300 bg-emerald-50 px-3.5 py-2 text-xs font-semibold text-emerald-800 hover:bg-emerald-100"
+                  className={`rounded-xl px-3.5 py-2 text-xs font-semibold flex items-center gap-1.5 transition ${
+                    pickup.status === "requested"
+                      ? "bg-emerald-600 text-white hover:bg-emerald-700 shadow-xs"
+                      : "border border-emerald-300 bg-emerald-50 text-emerald-800 hover:bg-emerald-100"
+                  }`}
                 >
-                  {pickup.status === "assigned" ? "Reassign Vehicle" : "Assign Vehicle & Driver"}
+                  <span>🚛</span>
+                  <span>{pickup.status === "assigned" ? "Reassign Vehicle" : "Assign Staff & Vehicle"}</span>
                 </button>
                 <button
                   onClick={() => setShowRejectModal(true)}
-                  className="rounded-xl border border-rose-300 bg-rose-50 px-3.5 py-2 text-xs font-semibold text-rose-700 hover:bg-rose-100"
+                  className="rounded-xl border border-rose-300 bg-rose-50 px-3.5 py-2 text-xs font-semibold text-rose-700 hover:bg-rose-100 flex items-center gap-1.5 transition shadow-2xs"
                 >
-                  Reject with Reason
+                  <span>✕</span>
+                  <span>Reject Pickup</span>
                 </button>
               </>
             )}

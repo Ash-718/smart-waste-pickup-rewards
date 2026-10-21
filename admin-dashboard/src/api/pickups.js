@@ -17,3 +17,8 @@ export function updatePickupStatus(id, statusOrPayload) {
   const body = typeof statusOrPayload === "string" ? { status: statusOrPayload } : statusOrPayload;
   return apiFetch(`/pickups/${id}/status`, { method: "PATCH", body });
 }
+
+export function rejectPickup(id, payload = {}) {
+  const body = typeof payload === "string" ? { rejectionReason: payload } : payload;
+  return apiFetch(`/pickups/${id}/reject`, { method: "POST", body });
+}

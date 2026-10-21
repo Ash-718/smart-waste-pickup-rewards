@@ -31,7 +31,7 @@ router.get("/analytics/waste-category", getWasteCategories);
 router.get("/users", listUsers);
 router.get("/users/:id", getUserProfile);
 
-const { assign, updateCoordinates } = require("../controllers/pickupController");
+const { assign, updateCoordinates, updateStatus, reject } = require("../controllers/pickupController");
 const {
   getLiveFleet,
   listVehicles,
@@ -44,8 +44,13 @@ const {
 router.get("/collectors", listCollectors);
 router.post("/collectors", createCollector);
 
-// Pickup Assignment & Coordinates Correction
+// Pickup Assignment & Status Updates
 router.post("/pickups/:id/assign", assign);
+router.patch("/pickups/:id/assign", assign);
+router.patch("/pickups/:id/status", updateStatus);
+router.post("/pickups/:id/status", updateStatus);
+router.post("/pickups/:id/reject", reject);
+router.patch("/pickups/:id/reject", reject);
 router.patch("/pickups/:id/coordinates", updateCoordinates);
 
 // Fleet & Vehicle Management

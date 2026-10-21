@@ -248,7 +248,7 @@ async function transitionPickupStatus({
         where: { id: pickupId },
         data: {
           status: targetStatus,
-          ...(targetStatus === "rejected" && rejectionReason ? { rejectionReason } : {}),
+          ...(targetStatus === "rejected" ? { rejectionReason: rejectionReason || null } : {}),
           ...(wasteQuantity ? { wasteQuantity } : {}),
         },
       });

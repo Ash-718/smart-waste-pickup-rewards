@@ -48,7 +48,6 @@ function stripCollectorSuffix(name) {
 export default function PickupQueuePage() {
   const [statusFilter, setStatusFilter] = useState("all");
   const [searchTerm, setSearchTerm] = useState("");
-  const [activeMenuId, setActiveMenuId] = useState(null);
   const [assignPickupTarget, setAssignPickupTarget] = useState(null);
   const [rejectPickupTarget, setRejectPickupTarget] = useState(null);
 
@@ -151,7 +150,7 @@ export default function PickupQueuePage() {
 
       {!isLoading && !isError && filteredPickups.length > 0 && (
         <div className="overflow-hidden rounded-2xl border border-neutral-200 bg-white shadow-xs">
-          <div className="overflow-x-auto">
+          <div className="overflow-x-auto min-h-[260px]">
             <table className="w-full divide-y divide-neutral-100 text-xs text-left">
               <thead className="bg-neutral-50 font-semibold text-neutral-600">
                 <tr>
@@ -160,18 +159,20 @@ export default function PickupQueuePage() {
                   <th className="px-4 py-3.5 whitespace-nowrap">Slot & Date</th>
                   <th className="px-4 py-3.5 whitespace-nowrap">Status</th>
                   <th className="px-4 py-3.5 whitespace-nowrap">Assigned Staff</th>
-                  <th className="px-4 py-3.5 text-right whitespace-nowrap min-w-[150px] lg:min-w-[180px] xl:min-w-[220px]">
+                  <th className="px-4 py-3.5 text-right whitespace-nowrap min-w-[220px] lg:min-w-[260px]">
                     Actions
                   </th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-neutral-100 bg-white">
-                {filteredPickups.map((p, idx) => (
-                  <tr
-                    key={p.id}
-                    onClick={() => navigate(`/queue/${p.id}`)}
-                    className="hover:bg-neutral-50/80 transition-colors cursor-pointer group"
-                  >
+                {filteredPickups.map((p) => {
+                  const status = (p.status || "").toLowerCase().trim();
+                  return (
+                    <tr
+                      key={p.id}
+                      onClick={() => navigate(`/queue/${p.id}`)}
+                      className="hover:bg-neutral-50/80 transition-colors cursor-pointer group"
+                    >
                     {/* Citizen: Name only */}
                     <td className="px-4 py-3.5 whitespace-nowrap">
                       <div
@@ -249,115 +250,88 @@ export default function PickupQueuePage() {
                       )}
                     </td>
 
-                    {/* Actions: Primary Details button + "..." menu */}
+                    {/* Actions Column */}
                     <td
-                      className="px-4 py-3.5 text-right whitespace-nowrap min-w-[150px] lg:min-w-[180px] xl:min-w-[220px]"
+                      className="px-4 py-3.5 text-right whitespace-nowrap min-w-[220px] lg:min-w-[260px]"
                       onClick={(e) => e.stopPropagation()}
                     >
-                      <div className="flex items-center justify-end gap-2 flex-nowrap">
+                      <div className="flex items-center justify-end gap-1.5 sm:gap-2 flex-wrap sm:flex-nowrap">
+                        {/* 1. Requested status: Exactly Accept (Green) | Reject (Red) | Details */}
+                        {status === "requested" && (
+                          <>
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setAssignPickupTarget(p);
+                              }}
+                              className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-600 px-2.5 py-1.5 text-xs font-semibold text-white hover:bg-emerald-700 shadow-2xs whitespace-nowrap transition-colors"
+                              title="Accept pickup and assign vehicle/collector"
+                            >
+                              <span>✓</span>
+                              <span>Accept</span>
+                            </button>
+
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setRejectPickupTarget(p);
+                              }}
+                              className="inline-flex items-center gap-1.5 rounded-lg border border-rose-300 bg-rose-50 px-2.5 py-1.5 text-xs font-semibold text-rose-700 hover:bg-rose-100 hover:text-rose-800 shadow-2xs whitespace-nowrap transition-colors"
+                              title="Reject pickup request"
+                            >
+                              <span>✕</span>
+                              <span>Reject</span>
+                            </button>
+                          </>
+                        )}
+
+                        {/* 2. Assigned status: Reassign | Reject | Details */}
+                        {status === "assigned" && (
+                          <>
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setAssignPickupTarget(p);
+                              }}
+                              className="inline-flex items-center gap-1.5 rounded-lg border border-emerald-300 bg-emerald-50 px-2.5 py-1.5 text-xs font-semibold text-emerald-800 hover:bg-emerald-100 shadow-2xs whitespace-nowrap transition-colors"
+                              title="Reassign vehicle or collector"
+                            >
+                              <span>🚛</span>
+                              <span>Reassign</span>
+                            </button>
+
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setRejectPickupTarget(p);
+                              }}
+                              className="inline-flex items-center gap-1.5 rounded-lg border border-rose-300 bg-rose-50 px-2.5 py-1.5 text-xs font-semibold text-rose-700 hover:bg-rose-100 hover:text-rose-800 shadow-2xs whitespace-nowrap transition-colors"
+                              title="Reject pickup request"
+                            >
+                              <span>✕</span>
+                              <span>Reject</span>
+                            </button>
+                          </>
+                        )}
+
+                        {/* 3. Details Button: Always shown for all statuses */}
                         <Link
                           to={`/queue/${p.id}`}
                           onClick={(e) => e.stopPropagation()}
-                          className="inline-flex items-center gap-1 rounded-lg border border-neutral-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-neutral-700 hover:bg-neutral-50 hover:text-neutral-900 shadow-2xs whitespace-nowrap flex-shrink-0 transition-colors"
+                          className="inline-flex items-center gap-1 rounded-lg border border-neutral-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-neutral-700 hover:bg-neutral-50 hover:text-neutral-900 shadow-2xs whitespace-nowrap transition-colors"
                         >
                           <span>Details</span>
                           <span className="text-neutral-400">→</span>
                         </Link>
-
-                        {/* Dropdown row menu for Reassign and Reject */}
-                        <div className="relative inline-block text-left">
-                          <button
-                            type="button"
-                            title="More actions"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setActiveMenuId(activeMenuId === p.id ? null : p.id);
-                            }}
-                            className="inline-flex h-7 w-7 items-center justify-center rounded-lg border border-neutral-200 bg-white text-neutral-600 hover:bg-neutral-50 hover:text-neutral-900 shadow-2xs whitespace-nowrap flex-shrink-0 transition-colors"
-                          >
-                            <span className="text-xs font-bold leading-none tracking-tight">•••</span>
-                          </button>
-
-                          {activeMenuId === p.id && (
-                            <>
-                              <div
-                                className="fixed inset-0 z-20 cursor-default"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  setActiveMenuId(null);
-                                }}
-                              />
-                              <div
-                                className={`absolute right-0 z-30 w-44 rounded-xl border border-neutral-200 bg-white p-1 text-left shadow-lg ${
-                                  idx >= filteredPickups.length - 2 && filteredPickups.length > 2
-                                    ? "bottom-full mb-1"
-                                    : "top-full mt-1"
-                                }`}
-                              >
-                                {["requested", "assigned", "on_the_way", "arrived"].includes(p.status) && (
-                                  <button
-                                    type="button"
-                                    disabled={p.status === "on_the_way" || p.status === "arrived"}
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      setActiveMenuId(null);
-                                      setAssignPickupTarget(p);
-                                    }}
-                                    title={
-                                      p.status === "on_the_way" || p.status === "arrived"
-                                        ? "Cannot reassign while in transit"
-                                        : undefined
-                                    }
-                                    className={`flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-xs font-medium transition-colors whitespace-nowrap flex-shrink-0 ${
-                                      p.status === "on_the_way" || p.status === "arrived"
-                                        ? "text-neutral-300 cursor-not-allowed"
-                                        : "text-emerald-700 hover:bg-emerald-50"
-                                    }`}
-                                  >
-                                    <span>🚛</span>
-                                    <span>
-                                      {p.assignments?.[0] || p.status === "assigned"
-                                        ? "Reassign Vehicle"
-                                        : "Assign Vehicle"}
-                                    </span>
-                                  </button>
-                                )}
-
-                                {(p.status === "requested" || p.status === "assigned") && (
-                                  <button
-                                    type="button"
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      setActiveMenuId(null);
-                                      setRejectPickupTarget(p);
-                                    }}
-                                    className="flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-xs font-medium text-rose-700 hover:bg-rose-50 transition-colors whitespace-nowrap flex-shrink-0"
-                                  >
-                                    <span>✕</span>
-                                    <span>Reject Request</span>
-                                  </button>
-                                )}
-
-                                <button
-                                  type="button"
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    setActiveMenuId(null);
-                                    navigate(`/queue/${p.id}`);
-                                  }}
-                                  className="flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-xs font-medium text-neutral-700 hover:bg-neutral-50 transition-colors whitespace-nowrap flex-shrink-0"
-                                >
-                                  <span>📄</span>
-                                  <span>Full Details</span>
-                                </button>
-                              </div>
-                            </>
-                          )}
-                        </div>
                       </div>
                     </td>
                   </tr>
-                ))}
+                );
+              })}
               </tbody>
             </table>
           </div>

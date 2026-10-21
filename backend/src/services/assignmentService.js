@@ -10,7 +10,7 @@ const { broadcastPickupStatus } = require("../socket");
  * 3. Atomic archiving of any previous active assignment on the pickup.
  * 4. Synchronization of pickup.assignedAdminId with vehicle.driverId.
  */
-async function assignVehicleToPickup({ pickupId, vehicleId, adminUserId, slotPeriod, requestedDate }) {
+async function assignVehicleToPickup({ pickupId, vehicleId, collectorId, adminUserId, slotPeriod, requestedDate }) {
   if (!pickupId) throw new HttpError(400, "Pickup ID is required");
   if (!vehicleId) throw new HttpError(400, "Vehicle ID is required");
   if (!adminUserId) throw new HttpError(401, "Admin user ID is required");
@@ -39,7 +39,7 @@ async function assignVehicleToPickup({ pickupId, vehicleId, adminUserId, slotPer
     }
 
     // 2. Fetch vehicle and strictly validate driver existence
-    const vehicle = await tx.vehicle.findUnique({
+    let vehicle = await tx.vehicle.findUnique({
       where: { id: vehicleId },
       include: {
         driver: { select: { id: true, name: true, email: true, phone: true, role: true } },
@@ -51,7 +51,28 @@ async function assignVehicleToPickup({ pickupId, vehicleId, adminUserId, slotPer
     }
 
     if (!vehicle.isActive) {
-      throw new HttpError(400, `Cannot assign inactive vehicle (${vehicle.registrationNo})`);
+      throw new HttpError(409, `Cannot assign inactive vehicle (${vehicle.registrationNo})`);
+    }
+
+    // If collectorId is provided and vehicle has no driver, or driver needs assignment:
+    if (collectorId && vehicle.driverId !== collectorId) {
+      const collector = await tx.user.findUnique({
+        where: { id: collectorId },
+        select: { id: true, name: true, role: true, email: true, phone: true },
+      });
+      if (!collector || collector.role !== "collector") {
+        throw new HttpError(400, "Assigned staff member must have role 'collector'");
+      }
+      // Assign driver to vehicle if vehicle has no driver
+      if (!vehicle.driverId) {
+        vehicle = await tx.vehicle.update({
+          where: { id: vehicle.id },
+          data: { driverId: collector.id },
+          include: {
+            driver: { select: { id: true, name: true, email: true, phone: true, role: true } },
+          },
+        });
+      }
     }
 
     if (!vehicle.driverId || !vehicle.driver) {
@@ -65,6 +86,26 @@ async function assignVehicleToPickup({ pickupId, vehicleId, adminUserId, slotPer
       throw new HttpError(
         400,
         `Cannot assign vehicle "${vehicle.registrationNo}": Assigned user "${vehicle.driver.name}" must have role 'collector'.`
+      );
+    }
+
+    // Check for conflicting in-transit trips on this vehicle
+    const conflictingActiveTrip = await tx.pickupAssignment.findFirst({
+      where: {
+        vehicleId: vehicle.id,
+        isActive: true,
+        pickupId: { not: pickupId },
+        pickup: {
+          status: { in: ["on_the_way", "arrived"] },
+        },
+      },
+      include: { pickup: true },
+    });
+
+    if (conflictingActiveTrip) {
+      throw new HttpError(
+        409,
+        `Vehicle "${vehicle.registrationNo}" is currently en route for another active pickup (#${conflictingActiveTrip.pickup.id.slice(0, 8)}). Please wait for the current trip to complete or choose another vehicle.`
       );
     }
 
