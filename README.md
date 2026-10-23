@@ -228,7 +228,7 @@ User (Role: Citizen) ────────► Pickups ◄──────�
 
 The backend uses **JWT-based authentication** across both REST APIs and WebSocket handshakes.
 
-The authentication flow is:
+The authentication flow is :
 
 ```text
 User Login (REST /api/auth/login)
