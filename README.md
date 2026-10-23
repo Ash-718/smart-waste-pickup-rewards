@@ -797,6 +797,14 @@ The platform is being developed as a full-stack solution consisting of a citizen
 
 GitHub: [Ash-718](https://github.com/Ash-718)
 
+**Mohit Godbole**
+
+Github: [mohit-1303](https://github.com/mohit-1303)
+
+**Amit Pawar**
+
+GitHub: [in-ops](https://github.com/in-ops)
+
 ---
 
 ## License
