@@ -14,6 +14,28 @@ import ErrorBoundary from "./src/components/ErrorBoundary";
 import { colors } from "./src/theme/colors";
 import { API_BASE_URL, SOCKET_BASE_URL } from "./src/lib/apiClient";
 
+if (Platform.OS === "web" && typeof document !== "undefined") {
+  const styleId = "wastewise-web-reset";
+  if (!document.getElementById(styleId)) {
+    const style = document.createElement("style");
+    style.id = styleId;
+    style.textContent = `
+      html, body {
+        margin: 0 !important;
+        padding: 0 !important;
+        background-color: ${colors.background} !important;
+        height: 100%;
+        -webkit-tap-highlight-color: transparent;
+      }
+      #root {
+        height: 100%;
+        background-color: ${colors.background} !important;
+      }
+    `;
+    document.head.appendChild(style);
+  }
+}
+
 // Prevent splash screen from auto-hiding until assets are loaded
 SplashScreen.preventAutoHideAsync().catch(() => {});
 
@@ -175,7 +197,7 @@ const styles = StyleSheet.create({
   },
   devDebugBar: {
     position: "absolute",
-    top: Platform.OS === "android" ? 4 : 44,
+    top: Platform.OS === "android" || Platform.OS === "web" ? 4 : 44,
     alignSelf: "center",
     backgroundColor: "rgba(15, 23, 42, 0.85)",
     paddingVertical: 2,

@@ -9,9 +9,16 @@ function resolveApiBaseUrl() {
     return envUrl;
   }
 
-  // Web environment can access localhost directly
+  // Web environment can access localhost or current host directly
   if (Platform.OS === "web") {
-    return envUrl || "http://localhost:4000/api";
+    if (typeof window !== "undefined" && window.location?.hostname) {
+      const hostname = window.location.hostname;
+      if (hostname === "localhost" || hostname === "127.0.0.1") {
+        return "http://localhost:4000/api";
+      }
+      return `http://${hostname}:4000/api`;
+    }
+    return "http://localhost:4000/api";
   }
 
   // On physical device or native runtime, resolve the dev machine IP via Expo packager hostUri
@@ -79,7 +86,8 @@ async function apiFetch(path, { method = "GET", body, isFormData = false } = {})
 
   let res;
   try {
-    res = await fetch(`${API_BASE_URL}${path}`, {
+    const baseUrl = resolveApiBaseUrl();
+    res = await fetch(`${baseUrl}${path}`, {
       method,
       headers,
       body: requestBody,

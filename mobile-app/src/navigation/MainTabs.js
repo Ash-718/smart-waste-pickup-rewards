@@ -29,6 +29,18 @@ export default function MainTabs() {
         tabBarActiveTintColor: colors.brand700,
         tabBarInactiveTintColor: colors.neutral400,
         tabBarIcon: ({ focused }) => <TabIcon route={route} focused={focused} />,
+        tabBarStyle: {
+          backgroundColor: colors.white,
+          borderTopColor: colors.neutral200,
+          borderTopWidth: 1,
+          height: 60,
+          paddingBottom: 8,
+          paddingTop: 8,
+        },
+        tabBarLabelStyle: {
+          fontSize: 11,
+          fontWeight: "600",
+        },
       })}
     >
       <Tab.Screen name="Home" component={HomeScreen} />
