@@ -38,7 +38,7 @@ npm run demo:seed
 ### 0:30 - 1:15 | Step 2: Open Citizen & Admin Interfaces
 
 **Action:**
-1. Open Admin Dashboard (`http://localhost:5173/fleet`), log in with `admin@wastewise.local` / `Admin@123`, and select `DEMO-TRUCK-01` in the fleet list.
+1. Open Admin Dashboard (`http://localhost:5173/fleet`), log in with `admin@wastewise.local` (or your configured admin account), and select `DEMO-TRUCK-01` in the fleet list.
 2. In the Citizen App, log in with `demo_citizen@example.com` / `DemoCitizen@123` and navigate to the assigned pickup's **Track Pickup** screen.
 
 **What to Say:**

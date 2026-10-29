@@ -718,6 +718,7 @@ sequenceDiagram
 #### Prerequisites
 * Node.js 18+ and PostgreSQL running with the `wastewise` database migrated (`npx prisma migrate dev`).
 * `DEV_SKIP=false` and `DEV_SKIP_ARRIVAL_RADIUS=false` in `backend/.env`.
+* Demo mode is enabled in local `.env` only (`VITE_DEMO_MODE=true` in `admin-dashboard/.env` and `EXPO_PUBLIC_DEMO_MODE=true` in `mobile-app/.env`). By default, all `.env.example` templates keep demo mode disabled (`false`) for production safety.
 
 #### Commands (Run in Separate Terminals)
 
@@ -733,7 +734,7 @@ npm run dev
 # 3. Start the Admin Dashboard (Vite)
 cd admin-dashboard
 npm run dev
-# Open http://localhost:5173/fleet and log in with admin@wastewise.local / Admin@123
+# Open http://localhost:5173/fleet and log in with your admin credentials (e.g. admin@wastewise.local)
 
 # 4. Start the Citizen Mobile App (Expo)
 cd mobile-app

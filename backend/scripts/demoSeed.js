@@ -4,8 +4,8 @@ const prisma = require("../src/db/client");
 const { assignVehicleToPickup } = require("../src/services/assignmentService");
 const demoConfig = require("./demo.config.json");
 
-// Production safeguard
-if (process.env.NODE_ENV === "production" && !process.env.ALLOW_PROD_DEMO_SEED) {
+// Production safeguard: refuse execution in production
+if (process.env.NODE_ENV === "production") {
   console.error("❌ Refusing to run demo seed script in production environment.");
   process.exit(1);
 }
@@ -19,7 +19,6 @@ const DEMO_COLLECTOR_EMAIL = process.env.DEMO_COLLECTOR_EMAIL || "demo_collector
 const DEMO_COLLECTOR_PASSWORD = process.env.DEMO_COLLECTOR_PASSWORD || "DemoCollector@123";
 
 const DEMO_ADMIN_EMAIL = process.env.DEMO_ADMIN_EMAIL || "demo_admin@example.com";
-const DEMO_ADMIN_PASSWORD = process.env.DEMO_ADMIN_PASSWORD || "DemoAdmin@123";
 
 const DEMO_VEHICLE_REG = process.env.DEMO_VEHICLE_REG || "DEMO-TRUCK-01";
 
@@ -152,13 +151,16 @@ async function seedDemo() {
     },
   });
 
-  // 4. Admin Account (reuse existing admin if present; otherwise create demo admin)
+  // 4. Admin Account (reuse existing admin if present; otherwise create demo admin with runtime password)
   let admin = await prisma.user.findFirst({
     where: { role: "admin" },
   });
+  let generatedAdminPassword = null;
 
   if (!admin) {
-    const adminHash = await bcrypt.hash(DEMO_ADMIN_PASSWORD, 10);
+    const crypto = require("crypto");
+    generatedAdminPassword = crypto.randomBytes(8).toString("hex") + "A1!";
+    const adminHash = await bcrypt.hash(generatedAdminPassword, 10);
     admin = await prisma.user.create({
       data: {
         name: "Demo Dispatch Admin",
@@ -232,7 +234,11 @@ async function seedDemo() {
   console.log("\n👤 Demo Login Credentials (all fake emails):");
   console.log(`   Citizen:    ${DEMO_CITIZEN_EMAIL} / ${DEMO_CITIZEN_PASSWORD}`);
   console.log(`   Collector:  ${DEMO_COLLECTOR_EMAIL} / ${DEMO_COLLECTOR_PASSWORD}`);
-  console.log(`   Admin:      ${admin.email} (password as seeded)`);
+  if (generatedAdminPassword) {
+    console.log(`   Admin:      ${admin.email} / ${generatedAdminPassword} (generated at runtime)`);
+  } else {
+    console.log(`   Admin:      ${admin.email} (configured admin credentials)`);
+  }
   console.log("\n🚀 Next Step to Run the Live Simulation:");
   console.log(`   npm run demo:drive -- --pickup=${pickup.id}`);
   console.log("============================================================\n");
