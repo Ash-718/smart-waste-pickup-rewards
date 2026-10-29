@@ -14,6 +14,7 @@
     "demo:seed": "node scripts/demoSeed.js",
     "demo:cleanup": "node scripts/demoSeed.js --cleanup",
     "demo:drive": "node scripts/simulateDriver.js",
+    "demo:smoke": "node scripts/demoSmoke.js",
     "test": "node test_photo_url_validation.js"
   },
   "dependencies": {

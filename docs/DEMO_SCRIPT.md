@@ -48,13 +48,15 @@ npm run demo:seed
 
 ---
 
-### 1:15 - 2:15 | Step 3: Launch Live Route Simulation
+### 1:15 - 4:08 | Step 3: Launch Live Route Simulation
 
 **Action:** Run the driver simulator in terminal:
 ```bash
 cd backend
 npm run demo:drive -- --speed=2 --auto-arrive
 ```
+
+> **Timing Note:** The full-fidelity rehearsal at `--speed=2 --auto-arrive` has a verified wall-clock duration of **2 minutes 53 seconds (172.58 seconds)** for the 2.91 km route, ensuring comfortable narration time across turning maneuvers. For a rapid 60-second review, `--speed=5` can be substituted.
 
 **What to Say:**
 > *"Now I'm launching the driver simulator. The script logs in as the collector through the real REST login endpoint, obtains a signed JWT, connects over Socket.IO, and calls the real PATCH status endpoint to start the trip.*
@@ -65,7 +67,7 @@ npm run demo:drive -- --speed=2 --auto-arrive
 
 ---
 
-### 2:15 - 3:00 | Step 4: Arrival Verification & Green Points Award
+### 4:08 - 4:45 | Step 4: Arrival Verification & Green Points Award
 
 **Action:** Observe the terminal and screens as the vehicle enters the 300 m arrival zone.
 
@@ -78,6 +80,38 @@ npm run demo:drive -- --speed=2 --auto-arrive
 
 ---
 
+## Edge-Case & Failure Demonstration Recipes
+
+### 1. Geofence Protection Recipe (Premature Arrival Rejection)
+Demonstrates that drivers cannot claim arrival while outside the 300 m radius.
+```bash
+cd backend
+node scripts/simulateDriver.js --speed=20 --stop-at-meters=450 --auto-arrive
+```
+**Server Response (HTTP 400 Bad Request):**
+```json
+{
+  "error": "Cannot mark arrived: Vehicle is ~443m away from the pickup location (allowed radius: 300m). Move closer to the destination."
+}
+```
+
+### 2. GPS Signal Loss Recipe (Telemetry Suppression)
+Demonstrates real-time telemetry freshness monitoring without auto-arriving.
+```bash
+cd backend
+node scripts/simulateDriver.js --speed=2 --gps-loss-at=60 --gps-loss-for=40
+```
+**Terminal Output:**
+```text
+[T+60s] ⚠️  [SIMULATED GPS LOSS] Signal suppressed (40s remaining). No location emitted.
+...
+[T+99s] ⚠️  [SIMULATED GPS LOSS] Signal suppressed (1s remaining). No location emitted.
+[T+102s] Signal restored: emitting fresh telemetry.
+```
+*UI Observation:* The citizen app's telemetry chip transitions from `"active"` to `"last update 40s ago"`, demonstrating stale GPS transparency.
+
+---
+
 ## Plan B: Fallbacks for Connectivity or Network Issues
 
 | Issue | Quick Diagnostic | Recovery Action (Plan B) |
@@ -86,3 +120,4 @@ npm run demo:drive -- --speed=2 --auto-arrive
 | **Wi-Fi / LAN IP Changed** | Mobile app displays "Unable to connect to backend" or offline overlay. | Run demo entirely in local browser: open mobile app via Web (`cd mobile-app && npx expo start --web`) at `http://localhost:8081` alongside the admin dashboard on `localhost`. |
 | **Port 4000 In Use** | Terminal logs `EADDRINUSE: address already in use :::4000`. | Stop any running node processes: `Get-Process node \| Stop-Process -Force` (PowerShell) and re-run `node src/app.js`. |
 | **Reset Everything to Pristine State** | Need to restart demo from scratch during presentation. | Run `npm run demo:seed` in `backend/`. It cleanly purges all prior demo artifacts and provisions a fresh pickup in 2 seconds. |
+
