@@ -16,6 +16,10 @@ export default function LiveFleetPage() {
   const [statusFilter, setStatusFilter] = useState("all"); // 'all', 'in_transit', 'idle', 'stale'
   const [connectionState, setConnectionState] = useState("reconnecting"); // 'connected' | 'reconnecting' | 'disconnected'
 
+  const isDemoMode = import.meta.env.VITE_DEMO_MODE === "true";
+  const [liveEvents, setLiveEvents] = useState([]);
+  const [eventsPanelOpen, setEventsPanelOpen] = useState(true);
+
   const socketRef = useRef(null);
 
   // Helper for human-readable last telemetry update
@@ -105,6 +109,18 @@ export default function LiveFleetPage() {
     const handleVehicleTelemetry = (telemetry) => {
       if (!telemetry || !telemetry.vehicleId) return;
 
+      if (isDemoMode) {
+        setLiveEvents((prev) => [
+          {
+            id: `${Date.now()}-${Math.random()}`,
+            type: "fleet:vehicle_location",
+            timestamp: new Date(),
+            summary: `${telemetry.registrationNo || telemetry.vehicleId} • ${telemetry.speed || 0} km/h • (${Number(telemetry.lat).toFixed(4)}, ${Number(telemetry.lng).toFixed(4)})`,
+          },
+          ...prev,
+        ].slice(0, 10));
+      }
+
       setVehicles((prev) =>
         prev.map((v) => {
           if (v.id === telemetry.vehicleId) {
@@ -127,12 +143,24 @@ export default function LiveFleetPage() {
       );
     };
 
-    socket.on("fleet:vehicle_location", handleVehicleTelemetry);
-
-    // Status changes listener for fleet assignments
-    socket.on("pickup:status", () => {
+    const handlePickupStatus = (payload) => {
+      if (isDemoMode && payload) {
+        setLiveEvents((prev) => [
+          {
+            id: `${Date.now()}-${Math.random()}`,
+            type: "fleet:pickup_status",
+            timestamp: new Date(),
+            summary: `Pickup #${(payload.pickupId || "").slice(0, 8)} status -> ${payload.status || "updated"}`,
+          },
+          ...prev,
+        ].slice(0, 10));
+      }
       refetch();
-    });
+    };
+
+    socket.on("fleet:vehicle_location", handleVehicleTelemetry);
+    socket.on("fleet:pickup_status", handlePickupStatus);
+    socket.on("pickup:status", handlePickupStatus);
 
     return () => {
       socket.off("connect");
@@ -141,11 +169,12 @@ export default function LiveFleetPage() {
       socket.off("disconnect");
       socket.off("connect_error");
       socket.off("fleet:vehicle_location", handleVehicleTelemetry);
-      socket.off("pickup:status");
+      socket.off("fleet:pickup_status", handlePickupStatus);
+      socket.off("pickup:status", handlePickupStatus);
       socket.disconnect();
       socketRef.current = null;
     };
-  }, [refetch]);
+  }, [refetch, isDemoMode]);
 
   // 3. Stale Vehicle Detection Timer (>30s)
   useEffect(() => {
@@ -402,7 +431,50 @@ export default function LiveFleetPage() {
             vehicles={vehicles}
             selectedVehicleId={selectedVehicleId}
             onSelectVehicle={setSelectedVehicleId}
+            isDemoMode={isDemoMode}
           />
+
+          {/* Demo Mode: Small Collapsible Live Events Panel (Read-only, only when VITE_DEMO_MODE=true) */}
+          {isDemoMode && (
+            <div className="absolute bottom-4 right-4 z-1000 w-80 bg-white/95 backdrop-blur-xs rounded-xl border border-neutral-200 shadow-lg overflow-hidden">
+              <div
+                onClick={() => setEventsPanelOpen(!eventsPanelOpen)}
+                className="flex items-center justify-between px-3 py-2 bg-neutral-900 text-white text-xs font-semibold cursor-pointer select-none"
+              >
+                <div className="flex items-center gap-1.5">
+                  <span className="h-2 w-2 rounded-full bg-emerald-400 animate-pulse"></span>
+                  <span>Live Socket Events ({liveEvents.length})</span>
+                </div>
+                <span className="text-[10px] text-neutral-400 font-mono">
+                  {eventsPanelOpen ? "▼ Collapse" : "▲ Expand"}
+                </span>
+              </div>
+
+              {eventsPanelOpen && (
+                <div className="max-h-56 overflow-y-auto divide-y divide-neutral-100 p-1 text-[11px]">
+                  {liveEvents.length === 0 ? (
+                    <div className="p-3 text-center text-neutral-400 italic">
+                      Waiting for socket telemetry events...
+                    </div>
+                  ) : (
+                    liveEvents.map((evt) => (
+                      <div key={evt.id} className="p-2 hover:bg-neutral-50 transition">
+                        <div className="flex items-center justify-between font-mono text-[10px] text-neutral-500">
+                          <span className={evt.type === "fleet:pickup_status" ? "text-amber-700 font-bold" : "text-emerald-700 font-bold"}>
+                            {evt.type}
+                          </span>
+                          <span>{evt.timestamp.toLocaleTimeString()}</span>
+                        </div>
+                        <div className="text-neutral-800 font-medium truncate mt-0.5">
+                          {evt.summary}
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
+              )}
+            </div>
+          )}
         </div>
       </div>
     </div>
