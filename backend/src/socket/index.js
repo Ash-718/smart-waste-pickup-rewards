@@ -19,7 +19,7 @@ function initSocketServer(httpServer) {
   const corsConfig =
     rawOrigins.length > 0
       ? { origin: rawOrigins, methods: ["GET", "POST", "PATCH", "PUT", "DELETE"], credentials: true }
-      : { origin: "*", methods: ["GET", "POST", "PATCH", "PUT", "DELETE"] };
+      : { origin: (origin, callback) => callback(null, true), methods: ["GET", "POST", "PATCH", "PUT", "DELETE"], credentials: true };
 
   const io = new Server(httpServer, {
     cors: corsConfig,

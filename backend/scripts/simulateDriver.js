@@ -26,6 +26,7 @@ const args = process.argv.slice(2).reduce((acc, arg) => {
 }, {});
 
 const IS_MULTI_MODE = Boolean(args.multi);
+const IS_LOOP_MODE = Boolean(args.loop);
 const TARGET_PICKUP_ID = args.pickup || args.pickupId || null;
 const DRIVER_EMAIL = args.email || process.env.DEMO_COLLECTOR_EMAIL || "demo_collector@example.com";
 const DRIVER_PASSWORD = args.password || process.env.DEMO_COLLECTOR_PASSWORD || "DemoCollector@123";
@@ -34,7 +35,7 @@ const BASE_SPEED_KMH = parseFloat(process.env.DEMO_SPEED_KMH || demoConfig.speed
 const EFFECTIVE_SPEED_KMH = BASE_SPEED_KMH * SPEED_MULTIPLIER;
 const INTERVAL_SECONDS = 3; // Emits every 3s while moving (matches server rate-limit)
 const INTERVAL_MS = INTERVAL_SECONDS * 1000;
-const HEARTBEAT_SECONDS = 10; // Emits every 10s while stopped
+const HEARTBEAT_SECONDS = 5; // Emits every 5s while stopped (keeps vehicle fresh under 30s threshold)
 
 const GPS_LOSS_AT = args["gps-loss-at"] ? parseFloat(args["gps-loss-at"]) : null;
 const GPS_LOSS_FOR = args["gps-loss-for"] ? parseFloat(args["gps-loss-for"]) : null;
@@ -107,22 +108,32 @@ async function fetchRoadRoute(startLat, startLng, destLat, destLng, tag = "") {
     const cachedPath = path.join(__dirname, "demo-route.json");
     if (fs.existsSync(cachedPath)) {
       const cached = JSON.parse(fs.readFileSync(cachedPath, "utf-8"));
-      return {
-        distanceMeters: cached.distanceMeters,
-        durationSeconds: cached.durationSeconds,
-        coordinates: cached.coordinates,
-        source: "cached_fallback",
-      };
+      const lastCoord = cached.coordinates?.[cached.coordinates.length - 1];
+      if (lastCoord && calculateHaversineMeters(lastCoord[0], lastCoord[1], destLat, destLng) < 800) {
+        return {
+          distanceMeters: cached.distanceMeters,
+          durationSeconds: cached.durationSeconds,
+          coordinates: cached.coordinates,
+          source: "cached_fallback",
+        };
+      }
     }
-    // Haversine direct line fallback
+    // Smooth multi-step linear fallback for arbitrary destinations
+    const steps = 40;
+    const coords = [];
+    for (let i = 0; i <= steps; i++) {
+      const frac = i / steps;
+      coords.push([
+        parseFloat((startLat + (destLat - startLat) * frac).toFixed(6)),
+        parseFloat((startLng + (destLng - startLng) * frac).toFixed(6)),
+      ]);
+    }
+    const dist = calculateHaversineMeters(startLat, startLng, destLat, destLng);
     return {
-      distanceMeters: calculateHaversineMeters(startLat, startLng, destLat, destLng),
-      durationSeconds: 300,
-      coordinates: [
-        [startLat, startLng],
-        [destLat, destLng],
-      ],
-      source: "haversine_direct",
+      distanceMeters: dist,
+      durationSeconds: Math.round(dist / 10),
+      coordinates: coords,
+      source: "interpolated_linear_fallback",
     };
   }
 }
@@ -307,65 +318,91 @@ async function simulateCollectorDriver({
   const metersPerSec = (effectiveSpeedKmh * 1000) / 3600;
   const metersPerStep = metersPerSec * INTERVAL_SECONDS;
 
-  let currentDistMeters = 0;
+  let activeWaypoints = waypoints;
+  let activeCumDistances = cumDistances;
+  let activeTotalMeters = totalRouteMeters;
+  let activeStopDist = targetStopDistMeters;
+  let activeDestLat = destLat;
+  let activeDestLng = destLng;
+
+  let continueRunning = true;
+  let finalTelemetry = null;
   let elapsedSec = 0;
   let finalDistFromDest = 999999;
 
-  while (currentDistMeters < targetStopDistMeters) {
-    const inGpsLoss =
-      gpsLossAt !== null &&
-      gpsLossFor !== null &&
-      elapsedSec >= gpsLossAt &&
-      elapsedSec < gpsLossAt + gpsLossFor;
+  while (continueRunning) {
+    let currentDistMeters = 0;
+    while (currentDistMeters < activeStopDist) {
+      const inGpsLoss =
+        gpsLossAt !== null &&
+        gpsLossFor !== null &&
+        elapsedSec >= gpsLossAt &&
+        elapsedSec < gpsLossAt + gpsLossFor;
 
-    const currentPos = interpolateAtDistance(waypoints, cumDistances, currentDistMeters);
-    finalDistFromDest = calculateHaversineMeters(currentPos.lat, currentPos.lng, destLat, destLng);
+      const currentPos = interpolateAtDistance(activeWaypoints, activeCumDistances, currentDistMeters);
+      finalDistFromDest = calculateHaversineMeters(currentPos.lat, currentPos.lng, activeDestLat, activeDestLng);
 
-    if (inGpsLoss) {
-      const remainingLoss = Math.round(gpsLossAt + gpsLossFor - elapsedSec);
-      console.log(`${logPrefix} [T+${elapsedSec}s] ⚠️ [GPS LOSS] Signal suppressed (${remainingLoss}s remaining).`);
-    } else {
-      const telemetry = {
-        lat: currentPos.lat,
-        lng: currentPos.lng,
-        speed: Math.round(BASE_SPEED_KMH),
-        heading: currentPos.heading,
-      };
+      if (inGpsLoss) {
+        const remainingLoss = Math.round(gpsLossAt + gpsLossFor - elapsedSec);
+        console.log(`${logPrefix} [T+${elapsedSec}s] ⚠️ [GPS LOSS] Signal suppressed (${remainingLoss}s remaining).`);
+      } else {
+        const telemetry = {
+          lat: currentPos.lat,
+          lng: currentPos.lng,
+          speed: Math.round(BASE_SPEED_KMH),
+          heading: currentPos.heading,
+        };
 
-      socket.emit("driver:location", telemetry, (ack) => {
-        if (ack?.error) {
-          console.error(`${logPrefix} [Socket Ack Error]:`, ack.error);
-        }
-      });
+        socket.emit("driver:location", telemetry, (ack) => {
+          if (ack?.error) {
+            console.error(`${logPrefix} [Socket Ack Error]:`, ack.error);
+          }
+        });
 
-      const progressPct = Math.min(100, Math.round((currentDistMeters / totalRouteMeters) * 100));
-      console.log(
-        `${logPrefix} [T+${elapsedSec}s] (${progressPct}%) -> (${telemetry.lat.toFixed(5)}, ${telemetry.lng.toFixed(5)}) • ${telemetry.speed} km/h • Head: ${telemetry.heading}° • Dist: ${finalDistFromDest}m`
-      );
+        const progressPct = Math.min(100, Math.round((currentDistMeters / activeTotalMeters) * 100));
+        console.log(
+          `${logPrefix} [T+${elapsedSec}s] (${progressPct}%) -> (${telemetry.lat.toFixed(5)}, ${telemetry.lng.toFixed(5)}) • ${telemetry.speed} km/h • Head: ${telemetry.heading}° • Dist: ${finalDistFromDest}m`
+        );
+      }
+
+      await new Promise((r) => setTimeout(r, INTERVAL_MS));
+      currentDistMeters += metersPerStep;
+      elapsedSec += INTERVAL_SECONDS;
     }
 
-    await new Promise((r) => setTimeout(r, INTERVAL_MS));
-    currentDistMeters += metersPerStep;
-    elapsedSec += INTERVAL_SECONDS;
+    // Final stop point for this leg
+    currentDistMeters = activeStopDist;
+    const finalPos = interpolateAtDistance(activeWaypoints, activeCumDistances, currentDistMeters);
+    finalDistFromDest = calculateHaversineMeters(finalPos.lat, finalPos.lng, activeDestLat, activeDestLng);
+    console.log(`\n${logPrefix} 📍 Waypoint reached: (${finalPos.lat.toFixed(5)}, ${finalPos.lng.toFixed(5)}) - ~${finalDistFromDest}m to leg target.`);
+
+    await new Promise((r) => setTimeout(r, 3100));
+    finalTelemetry = {
+      lat: finalPos.lat,
+      lng: finalPos.lng,
+      speed: 0,
+      heading: finalPos.heading,
+    };
+    await new Promise((resolve) => {
+      socket.emit("driver:location", finalTelemetry, (ack) => resolve(ack));
+    });
+
+    if (autoArrive) {
+      continueRunning = false;
+    } else if (IS_LOOP_MODE) {
+      console.log(`${logPrefix} 🔄 [LOOP MODE] Reversing waypoints to maintain live fleet movement...`);
+      activeWaypoints = [...activeWaypoints].reverse();
+      activeCumDistances = buildCumulativeDistances(activeWaypoints);
+      activeTotalMeters = activeCumDistances[activeCumDistances.length - 1];
+      const newDest = activeWaypoints[activeWaypoints.length - 1];
+      activeDestLat = newDest[0];
+      activeDestLng = newDest[1];
+      activeStopDist = findStopDistanceAlongRoute(activeWaypoints, activeCumDistances, stopAtMeters, activeDestLat, activeDestLng);
+      await new Promise((r) => setTimeout(r, 2000));
+    } else {
+      continueRunning = false;
+    }
   }
-
-  // Final stop point
-  currentDistMeters = targetStopDistMeters;
-  const finalPos = interpolateAtDistance(waypoints, cumDistances, currentDistMeters);
-  finalDistFromDest = calculateHaversineMeters(finalPos.lat, finalPos.lng, destLat, destLng);
-  console.log(`\n${logPrefix} 📍 Stopped at (${finalPos.lat.toFixed(5)}, ${finalPos.lng.toFixed(5)}) - ~${finalDistFromDest}m to destination (Allowed radius: 300m).`);
-
-  // Allow rate-limit window to settle before final stationary telemetry
-  await new Promise((r) => setTimeout(r, 3100));
-  const finalTelemetry = {
-    lat: finalPos.lat,
-    lng: finalPos.lng,
-    speed: 0,
-    heading: finalPos.heading,
-  };
-  await new Promise((resolve) => {
-    socket.emit("driver:location", finalTelemetry, (ack) => resolve(ack));
-  });
 
   // 6. Arrival & Completion
   if (autoArrive) {

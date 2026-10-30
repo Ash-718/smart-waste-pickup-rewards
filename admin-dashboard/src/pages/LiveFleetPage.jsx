@@ -9,14 +9,14 @@ import LiveFleetMap from "../components/LiveFleetMap";
 
 export default function LiveFleetPage() {
   const navigate = useNavigate();
-  const { logout } = useAuth();
+  const { user, logout } = useAuth();
   const [vehicles, setVehicles] = useState([]);
   const [selectedVehicleId, setSelectedVehicleId] = useState(null);
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState("all"); // 'all', 'in_transit', 'idle', 'stale'
   const [connectionState, setConnectionState] = useState("reconnecting"); // 'connected' | 'reconnecting' | 'disconnected'
 
-  const isDemoMode = import.meta.env.VITE_DEMO_MODE === "true";
+  const isDemoMode = import.meta.env.VITE_DEMO_MODE === "true" || Boolean(import.meta.env.DEV);
   const [liveEvents, setLiveEvents] = useState([]);
   const [eventsPanelOpen, setEventsPanelOpen] = useState(true);
 
@@ -54,7 +54,7 @@ export default function LiveFleetPage() {
 
     const socket = io(SOCKET_BASE_URL, {
       auth: { token },
-      transports: ["websocket"],
+      transports: ["websocket", "polling"],
       reconnectionAttempts: 20,
       reconnectionDelay: 2000,
     });
@@ -107,7 +107,7 @@ export default function LiveFleetPage() {
 
     // Real-time vehicle telemetry listener
     const handleVehicleTelemetry = (telemetry) => {
-      if (!telemetry || !telemetry.vehicleId) return;
+      if (!telemetry || (!telemetry.vehicleId && !telemetry.registrationNo)) return;
 
       if (isDemoMode) {
         setLiveEvents((prev) => [
@@ -123,7 +123,7 @@ export default function LiveFleetPage() {
 
       setVehicles((prev) =>
         prev.map((v) => {
-          if (v.id === telemetry.vehicleId) {
+          if (v.id === telemetry.vehicleId || v.registrationNo === telemetry.registrationNo) {
             return {
               ...v,
               location: {
@@ -174,7 +174,7 @@ export default function LiveFleetPage() {
       socket.disconnect();
       socketRef.current = null;
     };
-  }, [refetch, isDemoMode]);
+  }, [user, refetch, isDemoMode]);
 
   // 3. Stale Vehicle Detection Timer (>30s)
   useEffect(() => {

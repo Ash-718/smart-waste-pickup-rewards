@@ -9,13 +9,31 @@ class ApiError extends Error {
   }
 }
 
-let authToken = null;
+let authToken = (() => {
+  try {
+    return sessionStorage.getItem("wastewise_admin_token") || null;
+  } catch {
+    return null;
+  }
+})();
 
 function setAuthToken(token) {
   authToken = token;
+  try {
+    if (token) {
+      sessionStorage.setItem("wastewise_admin_token", token);
+    } else {
+      sessionStorage.removeItem("wastewise_admin_token");
+    }
+  } catch {}
 }
 
 function getAuthToken() {
+  if (!authToken) {
+    try {
+      authToken = sessionStorage.getItem("wastewise_admin_token") || null;
+    } catch {}
+  }
   return authToken;
 }
 
