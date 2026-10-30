@@ -104,6 +104,7 @@ function generateLeafletHtml(tileUrl) {
     var map = null;
     var tileLayer = null;
     var pickupMarker = null;
+    var arrivalCircle = null;
     var vehicleMarker = null;
     var routePolyline = null;
     var hasFittedInitial = false;
@@ -230,6 +231,10 @@ function generateLeafletHtml(tileUrl) {
           map.removeLayer(pickupMarker);
           pickupMarker = null;
         }
+        if (arrivalCircle && map) {
+          map.removeLayer(arrivalCircle);
+          arrivalCircle = null;
+        }
         return;
       }
 
@@ -243,6 +248,24 @@ function generateLeafletHtml(tileUrl) {
         }).addTo(map);
       } else {
         pickupMarker.setLatLng([lat, lng]);
+      }
+
+      if (showArrivalZone) {
+        if (!arrivalCircle) {
+          arrivalCircle = L.circle([lat, lng], {
+            radius: 300,
+            color: '#059669',
+            fillColor: '#10b981',
+            fillOpacity: 0.12,
+            weight: 1.5,
+            dashArray: '5, 5'
+          }).addTo(map);
+        } else {
+          arrivalCircle.setLatLng([lat, lng]);
+        }
+      } else if (arrivalCircle && map) {
+        map.removeLayer(arrivalCircle);
+        arrivalCircle = null;
       }
 
       if (!hasFittedInitial) {
@@ -337,7 +360,7 @@ function generateLeafletHtml(tileUrl) {
         if (msg.type === 'updateVehicle') {
           updateVehicle(msg.vehicle);
         } else if (msg.type === 'updatePickup') {
-          updatePickup(msg.pickup);
+          updatePickup(msg.pickup, Boolean(msg.showArrivalZone));
         } else if (msg.type === 'updateRoute') {
           updateRoute(msg.route);
         } else if (msg.type === 'recenter') {
@@ -370,6 +393,7 @@ const LeafletMap = forwardRef(function LeafletMap(
     pickup,
     vehicle,
     route,
+    showArrivalZone = false,
     onReady,
     onError,
     onRecenter,
@@ -495,8 +519,9 @@ const LeafletMap = forwardRef(function LeafletMap(
     postBridgeMessage({
       type: "updatePickup",
       pickup: sanitizedPickup,
+      showArrivalZone: Boolean(showArrivalZone),
     });
-  }, [isReady, sanitizedPickup, postBridgeMessage]);
+  }, [isReady, sanitizedPickup, showArrivalZone, postBridgeMessage]);
 
   // Send updates to WebView whenever route changes
   const normalizedRoute = useMemo(() => normalizeRoutePoints(route), [route]);

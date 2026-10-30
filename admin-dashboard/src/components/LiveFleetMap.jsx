@@ -1,5 +1,5 @@
 import { useEffect, useRef } from "react";
-import { MapContainer, TileLayer, Marker, Popup, useMap } from "react-leaflet";
+import { MapContainer, TileLayer, Marker, Popup, Circle, useMap } from "react-leaflet";
 import L from "leaflet";
 
 // Fix default Leaflet icon path resolution issues in bundlers
@@ -9,6 +9,24 @@ L.Icon.Default.mergeOptions({
   iconUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png",
   shadowUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png",
 });
+
+function createPickupDestinationIcon() {
+  const html = `
+    <div style="width: 28px; height: 34px; display: flex; align-items: center; justify-content: center; filter: drop-shadow(0 3px 4px rgba(0,0,0,0.3));">
+      <svg width="28" height="34" viewBox="0 0 30 36" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <path d="M15 0C6.716 0 0 6.716 0 15C0 24 13.5 34.5 15 35.5C16.5 34.5 30 24 30 15C30 6.716 23.284 0 15 0Z" fill="#DC2626"/>
+        <circle cx="15" cy="14" r="5" fill="#FFFFFF"/>
+      </svg>
+    </div>
+  `;
+  return L.divIcon({
+    html,
+    className: "pickup-destination-marker",
+    iconSize: [28, 34],
+    iconAnchor: [14, 34],
+    popupAnchor: [0, -32],
+  });
+}
 
 /**
  * Creates a custom SVG DivIcon for live vehicles with rotation based on heading.
@@ -98,18 +116,23 @@ function MapCenterController({ selectedCoords }) {
   return null;
 }
 
-export default function LiveFleetMap({ vehicles = [], selectedVehicleId, onSelectVehicle }) {
-  const defaultCenter = [19.0657, 72.8687]; // Mumbai BKC Operations Hub
+export default function LiveFleetMap({ vehicles = [], selectedVehicleId, onSelectVehicle, isDemoMode = false }) {
+  const defaultCenter = [16.8580, 74.6150]; // Default to Sangli / Miraj Operations Zone
   const selectedVehicle = vehicles.find((v) => v.id === selectedVehicleId);
   const selectedCoords = selectedVehicle?.location?.lat
     ? { lat: selectedVehicle.location.lat, lng: selectedVehicle.location.lng }
     : null;
 
+  const activePickup = selectedVehicle?.activePickups?.[0];
+  const pickupLat = activePickup?.latitude;
+  const pickupLng = activePickup?.longitude;
+  const hasPickupCoords = typeof pickupLat === "number" && typeof pickupLng === "number";
+
   return (
     <div className="relative w-full h-full">
       <MapContainer
         center={defaultCenter}
-        zoom={12}
+        zoom={13}
         scrollWheelZoom={true}
         className="w-full h-full z-0 rounded-2xl"
       >
@@ -120,6 +143,44 @@ export default function LiveFleetMap({ vehicles = [], selectedVehicleId, onSelec
         />
 
         <MapCenterController selectedCoords={selectedCoords} />
+
+        {/* Demo Mode: 300m arrival radius zone around destination of selected vehicle's active pickup */}
+        {isDemoMode && hasPickupCoords && (
+          <>
+            <Circle
+              center={[pickupLat, pickupLng]}
+              radius={300}
+              pathOptions={{
+                color: "#059669",
+                fillColor: "#10b981",
+                fillOpacity: 0.15,
+                weight: 2,
+                dashArray: "6, 6",
+              }}
+            />
+            <Marker
+              position={[pickupLat, pickupLng]}
+              icon={createPickupDestinationIcon()}
+            >
+              <Popup>
+                <div className="p-1 min-w-[180px]">
+                  <div className="font-bold text-xs text-neutral-900 border-b pb-1 mb-1">
+                    Pickup Destination
+                  </div>
+                  <div className="text-[11px] text-neutral-600 space-y-0.5">
+                    <div className="font-medium text-neutral-800">{activePickup.address}</div>
+                    {activePickup.citizenName && (
+                      <div>Citizen: <span className="font-semibold">{activePickup.citizenName}</span></div>
+                    )}
+                    <div className="text-emerald-700 font-semibold text-[10px] pt-1">
+                      🎯 300m Arrival Radius (Demo Zone)
+                    </div>
+                  </div>
+                </div>
+              </Popup>
+            </Marker>
+          </>
+        )}
 
         {vehicles.map((v) => {
           if (!v.location || typeof v.location.lat !== "number" || typeof v.location.lng !== "number") {

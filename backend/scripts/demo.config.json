@@ -1,0 +1,17 @@
+{
+  "start": {
+    "lat": 16.8580,
+    "lng": 74.6150,
+    "address": "Central Sorting Hub, MIDC Miraj, Sangli District, Maharashtra 416410"
+  },
+  "destination": {
+    "lat": 16.8413,
+    "lng": 74.6016,
+    "address": "Station Road, Near Miraj Junction, Sangli District, Maharashtra 416410"
+  },
+  "speedKmh": 30,
+  "defaultStopAtMeters": 250,
+  "arrivalRadiusMeters": 300,
+  "staleGpsTimeoutSeconds": 60,
+  "simulationNote": "Simulated live demo configuration. Coordinates verified along 2.91 km road network via OSRM."
+}

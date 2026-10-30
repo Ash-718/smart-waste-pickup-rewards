@@ -15,15 +15,33 @@ import StatusStepper from "./StatusStepper";
 
 function TrackingBottomSheet({
   trackingData,
+  vehicleLocation,
   status,
   navigation,
   connectionState,
   isStale,
+  demoMode = false,
   onCancelPickup,
 }) {
   const sheetRef = useRef(null);
   const insets = useSafeAreaInsets();
   const [sheetIndex, setSheetIndex] = useState(1); // 0: collapsed, 1: half, 2: full
+  const [secondsAgo, setSecondsAgo] = useState(null);
+
+  // Live telemetry age counter for demo mode
+  useEffect(() => {
+    if (!demoMode || !vehicleLocation?.recordedAt) {
+      setSecondsAgo(null);
+      return;
+    }
+    const updateDiff = () => {
+      const diff = Math.max(0, Math.round((Date.now() - new Date(vehicleLocation.recordedAt).getTime()) / 1000));
+      setSecondsAgo(diff);
+    };
+    updateDiff();
+    const interval = setInterval(updateDiff, 1000);
+    return () => clearInterval(interval);
+  }, [demoMode, vehicleLocation?.recordedAt]);
 
   // Three snap points: Collapsed (~160px), Half (~420px), Full (~88% of screen)
   const snapPoints = useMemo(() => ["22%", "52%", "88%"], []);
@@ -133,6 +151,12 @@ function TrackingBottomSheet({
                   : "Offline"}
               </Text>
             </View>
+
+            {demoMode && secondsAgo !== null && (
+              <View style={styles.demoUpdateChip}>
+                <Text style={styles.demoUpdateText}>last update {secondsAgo}s ago</Text>
+              </View>
+            )}
 
             {isStale && status === "on_the_way" && (
               <View style={styles.staleChip}>
@@ -346,6 +370,18 @@ const styles = StyleSheet.create({
     paddingHorizontal: 6,
     paddingVertical: 2,
     borderRadius: 6,
+  },
+  demoUpdateChip: {
+    marginTop: 4,
+    backgroundColor: colors.brand50,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 6,
+  },
+  demoUpdateText: {
+    fontSize: 10,
+    color: colors.brand700,
+    fontWeight: "600",
   },
   staleText: {
     fontSize: 10,

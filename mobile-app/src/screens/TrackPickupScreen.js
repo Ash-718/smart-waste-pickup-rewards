@@ -130,6 +130,8 @@ export default function TrackPickupScreen({ route, navigation }) {
     completed: "Pickup Completed",
   };
 
+  const isDemoMode = process.env.EXPO_PUBLIC_DEMO_MODE === "true";
+
   return (
     <View style={styles.container}>
       {/* 1. Full Screen Interactive Leaflet Map via WebView */}
@@ -139,6 +141,7 @@ export default function TrackPickupScreen({ route, navigation }) {
         pickup={pickupCoords}
         vehicle={vehicleLocation}
         route={polylineCoords}
+        showArrivalZone={isDemoMode}
         onReady={() => setMapReady(true)}
       />
 
@@ -189,10 +192,12 @@ export default function TrackPickupScreen({ route, navigation }) {
       {/* 4. Interactive Bottom Sheet with Trip Timeline & Details */}
       <TrackingBottomSheet
         trackingData={trackingData}
+        vehicleLocation={vehicleLocation}
         status={status}
         navigation={routeNav}
         connectionState={connectionState}
         isStale={isStale}
+        demoMode={isDemoMode}
         onCancelPickup={status === "requested" || status === "assigned" ? handleCancelPickup : null}
       />
     </View>
