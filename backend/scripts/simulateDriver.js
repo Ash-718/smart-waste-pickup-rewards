@@ -302,8 +302,12 @@ async function simulateCollectorDriver({
   // 5. Fetch road route and prepare constant speed interpolation
   const destLat = targetPickup.latitude || demoConfig.destination.lat;
   const destLng = targetPickup.longitude || demoConfig.destination.lng;
-  const startLat = jobsData.vehicle?.currentLat || demoConfig.start.lat;
-  const startLng = jobsData.vehicle?.currentLng || demoConfig.start.lng;
+  let startLat = jobsData.vehicle?.currentLat || demoConfig.start.lat;
+  let startLng = jobsData.vehicle?.currentLng || demoConfig.start.lng;
+  if (calculateHaversineMeters(startLat, startLng, destLat, destLng) < 300) {
+    startLat = demoConfig.start.lat;
+    startLng = demoConfig.start.lng;
+  }
 
   const routeData = await fetchRoadRoute(startLat, startLng, destLat, destLng, tag);
   const waypoints = routeData.coordinates;
@@ -478,6 +482,26 @@ async function main() {
         tag: "TRUCK-02",
         driverEmail: "demo_collector_suresh@example.com",
         driverPassword: "DemoCollector@123",
+      },
+      {
+        tag: "TRUCK-03",
+        driverEmail: "demo_collector_vikas@example.com",
+        driverPassword: "DemoCollector@123",
+      },
+      {
+        tag: "TRUCK-04",
+        driverEmail: "demo_collector_sachin@example.com",
+        driverPassword: "DemoCollector@123",
+      },
+      {
+        tag: "TRUCK-05",
+        driverEmail: "demo_collector_mahesh@example.com",
+        driverPassword: "DemoCollector@123",
+      },
+      {
+        tag: "TRUCK-WW",
+        driverEmail: "driver@wastewise.local",
+        driverPassword: "Driver@123",
       },
     ];
 

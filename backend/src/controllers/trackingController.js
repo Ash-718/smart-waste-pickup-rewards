@@ -51,10 +51,12 @@ const getPickupTracking = asyncHandler(async (req, res) => {
   const vehicle = activeAssignment ? activeAssignment.vehicle : null;
   const driver = vehicle ? vehicle.driver : null;
 
-  // Stale location detection (>30 seconds)
+  // Server-authoritative stale location detection (>30 seconds)
+  const nowServerMs = Date.now();
   let isStale = false;
+  let ageSeconds = null;
   if (vehicle && vehicle.lastLocationAt) {
-    const ageSeconds = (Date.now() - new Date(vehicle.lastLocationAt).getTime()) / 1000;
+    ageSeconds = Math.max(0, Math.round((nowServerMs - new Date(vehicle.lastLocationAt).getTime()) / 1000));
     isStale = ageSeconds > 30;
   }
 
@@ -77,6 +79,8 @@ const getPickupTracking = asyncHandler(async (req, res) => {
   }
 
   res.json({
+    serverTime: new Date(nowServerMs).toISOString(),
+    ageSeconds,
     tracking: {
       pickupId: pickup.id,
       status: pickup.status,
@@ -101,6 +105,7 @@ const getPickupTracking = asyncHandler(async (req, res) => {
               speed: vehicle.currentSpeed,
               heading: vehicle.currentHeading,
               recordedAt: vehicle.lastLocationAt,
+              ageSeconds,
               isStale,
             },
           }

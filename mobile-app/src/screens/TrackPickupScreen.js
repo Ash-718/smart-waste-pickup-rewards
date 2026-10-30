@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useMemo, useCallback } from "react";
+import React, { useState, useRef, useEffect, useMemo, useCallback } from "react";
 import {
   StyleSheet,
   View,
@@ -43,6 +43,7 @@ export default function TrackPickupScreen({ route, navigation }) {
     error,
     connectionState,
     isStale,
+    telemetryAgeSec,
     refetch,
   } = useLiveTracking(pickupId);
 
@@ -142,6 +143,7 @@ export default function TrackPickupScreen({ route, navigation }) {
         vehicle={vehicleLocation}
         route={polylineCoords}
         showArrivalZone={isDemoMode}
+        isStale={isStale}
         onReady={() => setMapReady(true)}
       />
 
@@ -197,6 +199,7 @@ export default function TrackPickupScreen({ route, navigation }) {
         navigation={routeNav}
         connectionState={connectionState}
         isStale={isStale}
+        telemetryAgeSec={telemetryAgeSec}
         demoMode={isDemoMode}
         onCancelPickup={status === "requested" || status === "assigned" ? handleCancelPickup : null}
       />

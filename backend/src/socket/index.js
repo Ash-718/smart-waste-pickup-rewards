@@ -46,11 +46,20 @@ function initSocketServer(httpServer) {
         return callback(new Error("CORS origin forbidden in production"));
       }
 
-      // In development/test, permit explicitly allowed origins and local addresses
+      // In development/test: if CORS_ORIGIN is unset (empty), permit all origins like Express app.js
+      if (rawOrigins.length === 0) {
+        return callback(null, true);
+      }
+
+      // If explicitly configured, permit allowlist or localhost/LAN addresses
       if (
         allowedOrigins.includes(origin) ||
         origin.startsWith("http://localhost:") ||
-        origin.startsWith("http://127.0.0.1:")
+        origin.startsWith("http://127.0.0.1:") ||
+        origin.startsWith("http://10.") ||
+        origin.startsWith("http://192.168.") ||
+        origin.startsWith("http://172.") ||
+        origin.startsWith("exp://")
       ) {
         return callback(null, true);
       }
@@ -140,12 +149,14 @@ function initSocketServer(httpServer) {
 
         if (!isAdmin && !isCitizenOwner && !isAssignedCollector) {
           const err = "Forbidden: You do not have permission to track this pickup";
+          console.warn(`[Socket] Room join REJECTED: User ${user.name} (${user.id}, role: ${user.role}) attempted to join pickup:${pickupId}`);
           if (callback) callback({ error: err });
           return socket.emit("join:error", { error: err });
         }
 
         const roomName = `pickup:${pickupId}`;
         socket.join(roomName);
+        console.log(`[Socket] User ${user.name} (${user.id}, role: ${user.role}) JOINED room ${roomName} (Socket ID: ${socket.id})`);
 
         const successPayload = { room: roomName, pickupId, status: pickup.status };
         if (callback) callback(successPayload);
@@ -160,6 +171,7 @@ function initSocketServer(httpServer) {
     socket.on("leave:pickup", ({ pickupId }) => {
       if (pickupId) {
         socket.leave(`pickup:${pickupId}`);
+        console.log(`[Socket] Socket ${socket.id} LEFT room pickup:${pickupId}`);
       }
     });
 
@@ -171,6 +183,7 @@ function initSocketServer(httpServer) {
         return socket.emit("join:error", { error: err });
       }
       socket.join("fleet:live");
+      console.log(`[Socket] Admin ${user.name} (${user.id}) JOINED fleet:live (Socket ID: ${socket.id})`);
       if (callback) callback({ room: "fleet:live", success: true });
     });
 
@@ -179,6 +192,7 @@ function initSocketServer(httpServer) {
       try {
         // Rule: Only users with role 'collector' may emit driver location
         if (user.role !== "collector") {
+          console.warn(`[Socket Telemetry] REJECTED: User ${user.id} (${user.role}) is not a collector.`);
           return;
         }
 
@@ -196,6 +210,7 @@ function initSocketServer(httpServer) {
           heading < 0 ||
           heading > 360
         ) {
+          console.warn(`[Socket Telemetry] VALIDATION FAILED for driver ${user.id}: lat=${lat}, lng=${lng}, speed=${speed}, heading=${heading}`);
           if (callback) callback({ error: "Invalid location coordinates or telemetry values" });
           return;
         }
@@ -212,6 +227,7 @@ function initSocketServer(httpServer) {
         });
 
         if (!vehicle || !vehicle.isActive || vehicle.assignments.length === 0) {
+          console.warn(`[Socket Telemetry] REJECTED: Driver ${user.name} (${user.id}) has no active vehicle assignments (vehicle: ${vehicle?.registrationNo || 'none'}).`);
           if (callback) callback({ error: "No active assignments for this driver" });
           return; // Ignore
         }
@@ -238,6 +254,7 @@ function initSocketServer(httpServer) {
             lastLocationAt: recordedAt,
           },
         });
+        const dbUpdated = true;
 
         // 2. Telemetry history persistence (throttled to ~15s)
         const lastHistory = lastHistoryByVehicle.get(vehicle.id) || 0;
@@ -268,18 +285,29 @@ function initSocketServer(httpServer) {
           speed,
           heading,
           recordedAt: recordedAt.toISOString(),
+          serverTime: recordedAt.toISOString(),
         };
 
+        const broadcastRooms = [];
         // Broadcast to EVERY active assignment's room for that vehicle
         for (const assignment of vehicle.assignments) {
-          io.to(`pickup:${assignment.pickupId}`).emit("vehicle:location", {
+          const room = `pickup:${assignment.pickupId}`;
+          io.to(room).emit("vehicle:location", {
             pickupId: assignment.pickupId,
             ...locationBroadcast,
           });
+          broadcastRooms.push(room);
         }
 
         // Broadcast to admin live fleet map (dedicated fleet telemetry event)
         io.to("fleet:live").emit("fleet:vehicle_location", locationBroadcast);
+        broadcastRooms.push("fleet:live");
+
+        if (process.env.NODE_ENV !== "production" && process.env.VERBOSE_TELEMETRY === "true") {
+          console.log(
+            `[Socket Telemetry] ${vehicle.registrationNo} -> (${lat.toFixed(5)}, ${lng.toFixed(5)}) • ${speed}km/h • Head: ${heading}° • Rooms: [${broadcastRooms.join(", ")}]`
+          );
+        }
 
         if (callback) callback({ success: true, timestamp: recordedAt });
       } catch (err) {

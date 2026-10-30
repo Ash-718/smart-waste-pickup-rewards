@@ -3,9 +3,16 @@ import { StyleSheet, View, Text, ActivityIndicator, TouchableOpacity, Platform }
 import { WebView } from "react-native-webview";
 import { colors } from "../theme/colors";
 
+const OSM_STANDARD_TILE_URL = "https://tile.openstreetmap.org/{z}/{x}/{y}.png";
+const rawEnvTile = process.env.EXPO_PUBLIC_TILE_URL;
+// Strictly enforce OpenStreetMap standard tile URL and reject any Carto / basemaps URLs
 const DEFAULT_TILE_URL =
-  process.env.EXPO_PUBLIC_TILE_URL ||
-  "https://a.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}.png";
+  rawEnvTile &&
+  !rawEnvTile.toLowerCase().includes("carto") &&
+  !rawEnvTile.toLowerCase().includes("basemaps") &&
+  (rawEnvTile.startsWith("https://") || rawEnvTile.startsWith("http://"))
+    ? rawEnvTile
+    : OSM_STANDARD_TILE_URL;
 
 function sanitizeNumber(val, fallback = null) {
   if (val === null || val === undefined || val === "") return fallback;
@@ -51,11 +58,18 @@ function normalizeRoutePoints(points) {
 }
 
 function generateLeafletHtml(tileUrl) {
+  const safeTileUrl =
+    !tileUrl || tileUrl.toLowerCase().includes("carto") || tileUrl.toLowerCase().includes("basemaps")
+      ? OSM_STANDARD_TILE_URL
+      : tileUrl;
   return `<!DOCTYPE html>
 <html>
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
+  <meta http-equiv="Pragma" content="no-cache" />
+  <meta http-equiv="Expires" content="0" />
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css" />
   <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
   <style>
@@ -135,17 +149,22 @@ function generateLeafletHtml(tileUrl) {
       });
     }
 
-    function createTruckIcon(heading) {
+    function createTruckIcon(heading, isStale) {
       var h = heading || 0;
-      var html = '<div class="truck-icon-wrapper">' +
+      var circleColor = isStale ? '#D97706' : '#059669';
+      var badge = isStale
+        ? '<div style="position: absolute; top: -14px; left: 50%; transform: translateX(-50%); background: #1E293B; color: #F59E0B; font-size: 8px; font-weight: 700; padding: 1px 4px; border-radius: 4px; white-space: nowrap; border: 1px solid #D97706; box-shadow: 0 1px 3px rgba(0,0,0,0.4);">Last Known</div>'
+        : '';
+      var html = '<div class="truck-icon-wrapper" style="position: relative;">' +
+        badge +
         '<div class="truck-inner" id="truck-body" style="transform: rotate(' + h + 'deg);">' +
           '<svg width="40" height="40" viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg">' +
-            '<circle cx="20" cy="20" r="17.5" fill="#059669" stroke="#FFFFFF" stroke-width="2.5"/>' +
+            '<circle cx="20" cy="20" r="17.5" fill="' + circleColor + '" stroke="#FFFFFF" stroke-width="2.5"/>' +
             '<path d="M12 15H21V25H12V15Z" fill="#FFFFFF"/>' +
             '<path d="M21 18H25L27.5 21.5V25H21V18Z" fill="#FFFFFF"/>' +
             '<circle cx="15.5" cy="25" r="2.2" fill="#1E293B" stroke="#FFFFFF" stroke-width="0.8"/>' +
             '<circle cx="24.5" cy="25" r="2.2" fill="#1E293B" stroke="#FFFFFF" stroke-width="0.8"/>' +
-            '<rect x="22" y="19" width="3" height="2.5" rx="0.5" fill="#059669"/>' +
+            '<rect x="22" y="19" width="3" height="2.5" rx="0.5" fill="' + circleColor + '"/>' +
           '</svg>' +
         '</div>' +
       '</div>';
@@ -192,18 +211,19 @@ function generateLeafletHtml(tileUrl) {
       }
     }
 
-    function updateVehicle(v) {
+    function updateVehicle(v, isStale) {
       if (!v || typeof v !== 'object') return;
       var targetLat = typeof v.lat === 'number' && !isNaN(v.lat) ? v.lat : null;
       var targetLng = typeof v.lng === 'number' && !isNaN(v.lng) ? v.lng : null;
       var targetHeading = typeof v.heading === 'number' && !isNaN(v.heading) ? v.heading : 0;
+      var stale = Boolean(isStale);
 
       if (targetLat === null || targetLng === null) return;
 
       if (!vehicleMarker) {
         curVehicle = { lat: targetLat, lng: targetLng, heading: targetHeading };
         vehicleMarker = L.marker([targetLat, targetLng], {
-          icon: createTruckIcon(targetHeading),
+          icon: createTruckIcon(targetHeading, stale),
           zIndexOffset: 1000
         }).addTo(map);
 
@@ -212,6 +232,8 @@ function generateLeafletHtml(tileUrl) {
         }
         return;
       }
+
+      vehicleMarker.setIcon(createTruckIcon(targetHeading, stale));
 
       // Smooth interpolation animation
       animStart = null;
@@ -332,16 +354,23 @@ function generateLeafletHtml(tileUrl) {
         map = L.map('map', {
           zoomControl: false,
           attributionControl: true
-        }).setView([19.0760, 72.8777], 13);
+        }).setView([16.8580, 74.6150], 13);
 
-        tileLayer = L.tileLayer('${tileUrl}', {
+        console.log("[Leaflet WebView] Initializing tileLayer with URL:", "${safeTileUrl}");
+        sendToRN({ type: 'tileInfo', url: '${safeTileUrl}' });
+
+        tileLayer = L.tileLayer('${safeTileUrl}', {
           maxZoom: 19,
-          attribution: '&copy; OpenStreetMap &copy; CARTO'
+          subdomains: ['a', 'b', 'c'],
+          attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
         }).addTo(map);
 
         tileLayer.on('tileerror', function() {
           tileFailCount++;
-          if (tileFailCount === 10) {
+          if (tileFailCount === 6 && !window._tileSwitched) {
+            window._tileSwitched = true;
+            tileLayer.setUrl('https://a.tile.openstreetmap.fr/osmfr/{z}/{x}/{y}.png');
+          } else if (tileFailCount >= 18) {
             sendToRN({ type: 'tilefail', count: tileFailCount });
           }
         });
@@ -358,7 +387,7 @@ function generateLeafletHtml(tileUrl) {
         var msg = JSON.parse(event.data);
         if (!msg || typeof msg !== 'object' || typeof msg.type !== 'string') return;
         if (msg.type === 'updateVehicle') {
-          updateVehicle(msg.vehicle);
+          updateVehicle(msg.vehicle, msg.isStale);
         } else if (msg.type === 'updatePickup') {
           updatePickup(msg.pickup, Boolean(msg.showArrivalZone));
         } else if (msg.type === 'updateRoute') {
@@ -394,6 +423,7 @@ const LeafletMap = forwardRef(function LeafletMap(
     vehicle,
     route,
     showArrivalZone = false,
+    isStale = false,
     onReady,
     onError,
     onRecenter,
@@ -475,6 +505,9 @@ const LeafletMap = forwardRef(function LeafletMap(
           setErrorMessage("Map tiles could not be loaded. Please check your internet connection.");
           if (onError) onError("Tile loading failed");
           break;
+        case "tileInfo":
+          console.log("[LeafletMap Diagnostic] Runtime tile URL used by Leaflet WebView:", data.url);
+          break;
         case "recentered":
           if (onRecenter) onRecenter();
           break;
@@ -501,8 +534,9 @@ const LeafletMap = forwardRef(function LeafletMap(
     postBridgeMessage({
       type: "updateVehicle",
       vehicle: sanitizedVehicle,
+      isStale: Boolean(isStale),
     });
-  }, [isReady, sanitizedVehicle, postBridgeMessage]);
+  }, [isReady, sanitizedVehicle, isStale, postBridgeMessage]);
 
   // Sanitized pickup numbers (safely handles null/undefined pickup without crashing)
   const sanitizedPickup = useMemo(() => {
@@ -547,7 +581,10 @@ const LeafletMap = forwardRef(function LeafletMap(
         originWhitelist={["https://*", "about:blank"]}
         source={{ html: htmlContent }}
         javaScriptEnabled={true}
-        domStorageEnabled={true}
+        domStorageEnabled={false}
+        cacheEnabled={false}
+        incognito={true}
+        cacheMode="LOAD_NO_CACHE"
         onMessage={handleWebViewMessage}
         onError={() => {
           setHasError(true);

@@ -1,4 +1,4 @@
-import React, { useRef, useMemo, useCallback, useState } from "react";
+import React, { useRef, useMemo, useCallback, useState, useEffect } from "react";
 import {
   StyleSheet,
   View,
@@ -13,6 +13,15 @@ import { Ionicons } from "@expo/vector-icons";
 import { colors } from "../theme/colors";
 import StatusStepper from "./StatusStepper";
 
+function formatTelemetryAge(sec) {
+  if (sec === null || sec === undefined) return "";
+  if (sec < 60) return `${sec}s ago`;
+  if (sec < 3600) return `${Math.floor(sec / 60)}m ago`;
+  const hours = Math.floor(sec / 3600);
+  const mins = Math.floor((sec % 3600) / 60);
+  return mins > 0 ? `${hours}h ${mins}m ago` : `${hours}h ago`;
+}
+
 function TrackingBottomSheet({
   trackingData,
   vehicleLocation,
@@ -20,28 +29,21 @@ function TrackingBottomSheet({
   navigation,
   connectionState,
   isStale,
+  telemetryAgeSec,
   demoMode = false,
   onCancelPickup,
 }) {
   const sheetRef = useRef(null);
   const insets = useSafeAreaInsets();
   const [sheetIndex, setSheetIndex] = useState(1); // 0: collapsed, 1: half, 2: full
-  const [secondsAgo, setSecondsAgo] = useState(null);
 
-  // Live telemetry age counter for demo mode
-  useEffect(() => {
-    if (!demoMode || !vehicleLocation?.recordedAt) {
-      setSecondsAgo(null);
-      return;
-    }
-    const updateDiff = () => {
-      const diff = Math.max(0, Math.round((Date.now() - new Date(vehicleLocation.recordedAt).getTime()) / 1000));
-      setSecondsAgo(diff);
-    };
-    updateDiff();
-    const interval = setInterval(updateDiff, 1000);
-    return () => clearInterval(interval);
-  }, [demoMode, vehicleLocation?.recordedAt]);
+  // Authoritative telemetry age passed directly from drift-calibrated tracker
+  const secondsAgo =
+    telemetryAgeSec !== undefined && telemetryAgeSec !== null
+      ? telemetryAgeSec
+      : vehicleLocation?.recordedAt
+      ? Math.max(0, Math.round((Date.now() - new Date(vehicleLocation.recordedAt).getTime()) / 1000))
+      : null;
 
   // Three snap points: Collapsed (~160px), Half (~420px), Full (~88% of screen)
   const snapPoints = useMemo(() => ["22%", "52%", "88%"], []);
@@ -111,6 +113,16 @@ function TrackingBottomSheet({
                 <Text style={styles.etaBig}>Assigning Vehicle...</Text>
                 <Text style={styles.subtext}>Finding nearest waste collector</Text>
               </View>
+            ) : isStale ? (
+              <View>
+                <Text style={[styles.etaBig, { color: colors.amber700 }]}>Last Known Location</Text>
+                <Text style={styles.subtext}>
+                  Live ETA paused • GPS inactive ({formatTelemetryAge(secondsAgo)})
+                </Text>
+                <Text style={styles.staleEstimateSub}>
+                  Last estimate: ~{etaMinutes} min ({distanceKm} km away) • Paused
+                </Text>
+              </View>
             ) : !trackingData?.pickupCoordinates || !navigation ? (
               <View>
                 <Text style={styles.etaBig}>Vehicle En Route</Text>
@@ -133,36 +145,45 @@ function TrackingBottomSheet({
             <View
               style={[
                 styles.connChip,
-                connectionState === "connected" && styles.connChipConnected,
+                connectionState === "connected" && !isStale && styles.connChipConnected,
+                connectionState === "connected" && isStale && styles.connChipStale,
                 connectionState === "reconnecting" && styles.connChipReconnecting,
               ]}
             >
               <View
                 style={[
                   styles.connDot,
-                  connectionState === "connected" && styles.connDotConnected,
+                  connectionState === "connected" && !isStale && styles.connDotConnected,
+                  connectionState === "connected" && isStale && styles.connDotStale,
                 ]}
               />
-              <Text style={styles.connText}>
+              <Text
+                style={[
+                  styles.connText,
+                  connectionState === "connected" && isStale && styles.connTextStale,
+                ]}
+              >
                 {connectionState === "connected"
-                  ? "Live"
+                  ? isStale
+                    ? "GPS Stale"
+                    : "Live"
                   : connectionState === "reconnecting"
                   ? "Reconnecting"
                   : "Offline"}
               </Text>
             </View>
 
-            {demoMode && secondsAgo !== null && (
-              <View style={styles.demoUpdateChip}>
-                <Text style={styles.demoUpdateText}>last update {secondsAgo}s ago</Text>
-              </View>
-            )}
-
-            {isStale && status === "on_the_way" && (
+            {isStale && status !== "completed" && status !== "arrived" ? (
               <View style={styles.staleChip}>
-                <Text style={styles.staleText}>GPS Signal Weak</Text>
+                <Text style={styles.staleText}>
+                  GPS Inactive {secondsAgo !== null ? `(${formatTelemetryAge(secondsAgo)})` : ""}
+                </Text>
               </View>
-            )}
+            ) : !isStale && secondsAgo !== null ? (
+              <View style={styles.demoUpdateChip}>
+                <Text style={styles.demoUpdateText}>updated {formatTelemetryAge(secondsAgo)}</Text>
+              </View>
+            ) : null}
           </View>
         </View>
 
@@ -332,6 +353,12 @@ const styles = StyleSheet.create({
     color: colors.neutral500,
     marginTop: 3,
   },
+  staleEstimateSub: {
+    fontSize: 12,
+    color: colors.neutral500,
+    marginTop: 3,
+    fontStyle: "italic",
+  },
   chipsCol: {
     alignItems: "flex-end",
   },
@@ -349,6 +376,11 @@ const styles = StyleSheet.create({
   connChipReconnecting: {
     backgroundColor: colors.amber50,
   },
+  connChipStale: {
+    backgroundColor: colors.amber50,
+    borderWidth: 1,
+    borderColor: colors.amber300,
+  },
   connDot: {
     width: 6,
     height: 6,
@@ -359,10 +391,16 @@ const styles = StyleSheet.create({
   connDotConnected: {
     backgroundColor: colors.brand600,
   },
+  connDotStale: {
+    backgroundColor: colors.amber600,
+  },
   connText: {
     fontSize: 11,
     fontWeight: "600",
     color: colors.neutral700,
+  },
+  connTextStale: {
+    color: colors.amber700,
   },
   staleChip: {
     marginTop: 4,

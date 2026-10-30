@@ -1,5 +1,12 @@
 import { useState } from "react";
-import { KeyboardAvoidingView, Platform, StyleSheet, Text, View } from "react-native";
+import {
+  KeyboardAvoidingView,
+  Platform,
+  StyleSheet,
+  Text,
+  View,
+  TouchableOpacity,
+} from "react-native";
 import { useAuth } from "../context/AuthContext";
 import TextField from "../components/TextField";
 import Button from "../components/Button";

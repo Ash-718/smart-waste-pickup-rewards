@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from "react";
+import React, { useState, useEffect, useRef, useCallback } from "react";
 import { AppState, Platform } from "react-native";
 import { io } from "socket.io-client";
 import * as Haptics from "expo-haptics";
@@ -14,9 +14,12 @@ export function useLiveTracking(pickupId) {
   const [error, setError] = useState(null);
   const [connectionState, setConnectionState] = useState("connecting"); // connecting, connected, reconnecting, disconnected
   const [isStale, setIsStale] = useState(false);
+  const [telemetryAgeSec, setTelemetryAgeSec] = useState(null);
 
   const socketRef = useRef(null);
   const staleTimerRef = useRef(null);
+  const serverDriftMsRef = useRef(0);
+  const lastPacketArrivalMsRef = useRef(null);
   const lastReceivedTimestampRef = useRef(null);
   const latestLocationRef = useRef(null);
   const locationThrottleTimerRef = useRef(null);
@@ -48,23 +51,44 @@ export function useLiveTracking(pickupId) {
       try {
         const res = await getPickupTracking(pickupId);
         if (res && res.tracking) {
+          if (res.serverTime) {
+            serverDriftMsRef.current = Date.now() - new Date(res.serverTime).getTime();
+          }
           const t = res.tracking;
           setTrackingData(t);
           setStatus(t.status);
           setNavigation(t.navigation);
 
           if (t.vehicle && t.vehicle.location) {
+            const loc = t.vehicle.location;
             setVehicleLocation({
-              lat: t.vehicle.location.lat,
-              lng: t.vehicle.location.lng,
-              speed: t.vehicle.location.speed || 0,
-              heading: t.vehicle.location.heading || 0,
-              recordedAt: t.vehicle.location.recordedAt,
+              lat: loc.lat,
+              lng: loc.lng,
+              speed: loc.speed || 0,
+              heading: loc.heading || 0,
+              recordedAt: loc.recordedAt,
             });
-            setIsStale(t.status === "arrived" ? false : t.vehicle.location.isStale || false);
-            lastReceivedTimestampRef.current = t.vehicle.location.recordedAt
-              ? new Date(t.vehicle.location.recordedAt).getTime()
-              : Date.now();
+
+            // Authoritative server age or drift-calibrated calculation
+            let initialAgeSec = 0;
+            if (loc.ageSeconds !== undefined && loc.ageSeconds !== null) {
+              initialAgeSec = loc.ageSeconds;
+            } else if (loc.recordedAt) {
+              const recordedMs = new Date(loc.recordedAt).getTime();
+              initialAgeSec = Math.max(0, Math.round((Date.now() - serverDriftMsRef.current - recordedMs) / 1000));
+            }
+
+            const initialStale =
+              t.status === "arrived" || t.status === "completed"
+                ? false
+                : loc.isStale !== undefined
+                ? loc.isStale
+                : initialAgeSec > 30;
+
+            setIsStale(initialStale);
+            setTelemetryAgeSec(initialAgeSec);
+            lastPacketArrivalMsRef.current = Date.now() - initialAgeSec * 1000;
+            lastReceivedTimestampRef.current = Date.now();
           }
         }
         setError(null);
@@ -79,27 +103,29 @@ export function useLiveTracking(pickupId) {
   );
 
   // Watch for stale locations (>30s without update while in transit)
-  // Directly references last received socket packet timestamp, independent of throttled React state
   useEffect(() => {
     const checkStale = () => {
-      // Once arrived, the vehicle is waiting at the citizen's doorstep; suppress stale warning
-      if (status === "arrived") {
+      // Once arrived or completed, suppress stale warning
+      if (status === "arrived" || status === "completed") {
         setIsStale(false);
         return;
       }
 
-      if (
-        ["assigned", "on_the_way"].includes(status) &&
-        lastReceivedTimestampRef.current
-      ) {
-        const ageSec = (Date.now() - lastReceivedTimestampRef.current) / 1000;
+      if (!lastPacketArrivalMsRef.current) {
+        return;
+      }
+
+      const ageSec = Math.max(0, Math.round((Date.now() - lastPacketArrivalMsRef.current) / 1000));
+      setTelemetryAgeSec(ageSec);
+
+      if (["assigned", "on_the_way"].includes(status)) {
         setIsStale(ageSec > 30);
       } else {
         setIsStale(false);
       }
     };
 
-    staleTimerRef.current = setInterval(checkStale, 5000);
+    staleTimerRef.current = setInterval(checkStale, 1000);
     return () => {
       if (staleTimerRef.current) clearInterval(staleTimerRef.current);
     };
@@ -129,46 +155,20 @@ export function useLiveTracking(pickupId) {
 
     const socket = io(SOCKET_BASE_URL, {
       auth: { token },
-      transports: ["websocket"],
-      reconnectionAttempts: 15,
+      transports: ["websocket", "polling"],
+      reconnectionAttempts: 20,
       reconnectionDelay: 2000,
+      timeout: 10000,
     });
     socketRef.current = socket;
 
-    socket.on("connect", () => {
-      setConnectionState("connected");
-      // Join pickup room
-      socket.emit("join:pickup", { pickupId }, (ack) => {
-        if (ack?.error) {
-          setError(ack.error);
-        }
-      });
-      // Silent sync with REST API
-      fetchTracking(true);
-    });
-
-    socket.on("reconnect", () => {
-      setConnectionState("connected");
-      socket.emit("join:pickup", { pickupId });
-      fetchTracking(true);
-      triggerHaptic("impact");
-    });
-
-    socket.on("reconnecting", () => {
-      setConnectionState("reconnecting");
-    });
-
-    socket.on("disconnect", () => {
-      setConnectionState("disconnected");
-    });
-
-    socket.on("connect_error", () => {
-      setConnectionState("reconnecting");
-    });
-
-    // Handle live vehicle movement with 2-second state throttling
+    // Register incoming telemetry listeners BEFORE emitting room join
     socket.on("vehicle:location", (data) => {
       if (!data || !data.lat || !data.lng) return;
+
+      if (data.serverTime) {
+        serverDriftMsRef.current = Date.now() - new Date(data.serverTime).getTime();
+      }
 
       const loc = {
         lat: data.lat,
@@ -178,9 +178,18 @@ export function useLiveTracking(pickupId) {
         recordedAt: data.recordedAt || new Date().toISOString(),
       };
 
+      // Check packet freshness
+      let packetAgeSec = 0;
+      if (data.recordedAt) {
+        const packetRecordedMs = new Date(data.recordedAt).getTime();
+        packetAgeSec = Math.max(0, Math.round((Date.now() - serverDriftMsRef.current - packetRecordedMs) / 1000));
+      }
+
       latestLocationRef.current = loc;
+      lastPacketArrivalMsRef.current = Date.now() - packetAgeSec * 1000;
       lastReceivedTimestampRef.current = Date.now();
-      setIsStale(false);
+      setTelemetryAgeSec(packetAgeSec);
+      setIsStale(packetAgeSec > 30);
 
       const now = Date.now();
       const timeSinceLastUpdate = now - lastLocationStateUpdateTimeRef.current;
@@ -202,6 +211,7 @@ export function useLiveTracking(pickupId) {
 
     // Handle pickup status transitions
     socket.on("pickup:status", (data) => {
+      console.log("[LiveTracking] RECEIVED pickup:status", data);
       if (data && data.status) {
         setStatus(data.status);
         if (data.status === "completed") {
@@ -212,6 +222,45 @@ export function useLiveTracking(pickupId) {
         // Refetch full payload to update timestamps and points
         fetchTracking(true);
       }
+    });
+
+    socket.on("connect", () => {
+      console.log(`[LiveTracking] Socket connected (ID: ${socket.id}) to ${SOCKET_BASE_URL}`);
+      setConnectionState("connected");
+      // Join pickup room
+      socket.emit("join:pickup", { pickupId }, (ack) => {
+        if (ack?.error) {
+          console.warn("[LiveTracking] join:pickup failed:", ack.error);
+          setError(ack.error);
+        } else {
+          console.log(`[LiveTracking] Joined room for pickup ${pickupId}`, ack);
+        }
+      });
+      // Silent sync with REST API
+      fetchTracking(true);
+    });
+
+    socket.on("reconnect", (attempt) => {
+      console.log(`[LiveTracking] Socket reconnected on attempt ${attempt}`);
+      setConnectionState("connected");
+      socket.emit("join:pickup", { pickupId });
+      fetchTracking(true);
+      triggerHaptic("impact");
+    });
+
+    socket.on("reconnecting", (attempt) => {
+      console.log(`[LiveTracking] Socket reconnecting (attempt ${attempt})...`);
+      setConnectionState("reconnecting");
+    });
+
+    socket.on("disconnect", (reason) => {
+      console.log("[LiveTracking] Socket disconnected:", reason);
+      setConnectionState("disconnected");
+    });
+
+    socket.on("connect_error", (err) => {
+      console.warn("[LiveTracking] Socket connect_error:", err.message);
+      setConnectionState("reconnecting");
     });
 
     return () => {
@@ -244,6 +293,7 @@ export function useLiveTracking(pickupId) {
     error,
     connectionState,
     isStale,
+    telemetryAgeSec,
     refetch: fetchTracking,
   };
 }
