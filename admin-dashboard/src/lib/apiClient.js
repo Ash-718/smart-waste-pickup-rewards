@@ -69,4 +69,33 @@ function getMediaUrl(relativeOrAbsoluteUrl) {
   return `${base}${cleanPath}`;
 }
 
-export { apiFetch, setAuthToken, getAuthToken, API_BASE_URL, SOCKET_BASE_URL, ApiError, getMediaUrl };
+async function downloadFile(path, defaultFilename = "report.pdf") {
+  const token = getAuthToken();
+  const headers = {};
+  if (token) headers["Authorization"] = `Bearer ${token}`;
+
+  const res = await fetch(`${API_BASE_URL}${path}`, { headers });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.error || `Download failed (${res.status})`);
+  }
+
+  const blob = await res.blob();
+  const disposition = res.headers.get("content-disposition");
+  let filename = defaultFilename;
+  if (disposition && disposition.includes("filename=")) {
+    const match = disposition.match(/filename="?([^"]+)"?/);
+    if (match && match[1]) filename = match[1];
+  }
+
+  const url = window.URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  window.URL.revokeObjectURL(url);
+}
+
+export { apiFetch, downloadFile, setAuthToken, getAuthToken, API_BASE_URL, SOCKET_BASE_URL, ApiError, getMediaUrl };

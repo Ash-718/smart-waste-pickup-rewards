@@ -97,7 +97,7 @@ export default function HomeScreen({ navigation }) {
           </View>
           <Pressable
             style={styles.impactDetailsBtn}
-            onPress={() => navigation.navigate("Impact")}
+            onPress={() => navigation.navigate("Impact", { tab: "reports" })}
           >
             <Text style={styles.impactDetailsText}>Full Report →</Text>
           </Pressable>

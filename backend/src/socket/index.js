@@ -15,11 +15,51 @@ const lastHistoryByVehicle = new Map(); // 15s history persistence throttle
  * @returns {Server}
  */
 function initSocketServer(httpServer) {
-  const rawOrigins = (process.env.CORS_ORIGIN || "").split(",").map((s) => s.trim()).filter(Boolean);
-  const corsConfig =
-    rawOrigins.length > 0
-      ? { origin: rawOrigins, methods: ["GET", "POST", "PATCH", "PUT", "DELETE"], credentials: true }
-      : { origin: (origin, callback) => callback(null, true), methods: ["GET", "POST", "PATCH", "PUT", "DELETE"], credentials: true };
+  const rawOrigins = (process.env.CORS_ORIGIN || "")
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean);
+
+  const devOrigins = [
+    "http://localhost:5173",
+    "http://127.0.0.1:5173",
+    "http://localhost:8081",
+    "http://127.0.0.1:8081",
+    "http://localhost:19006",
+    "http://127.0.0.1:19006",
+    "http://localhost:3000",
+    "http://127.0.0.1:3000",
+  ];
+
+  const allowedOrigins = rawOrigins.length > 0 ? rawOrigins : devOrigins;
+
+  const corsConfig = {
+    origin: (origin, callback) => {
+      // Allow requests with no origin (e.g. mobile apps, curl, native sockets)
+      if (!origin) return callback(null, true);
+
+      // In production, strictly enforce configured allowlist
+      if (process.env.NODE_ENV === "production") {
+        if (allowedOrigins.includes(origin)) {
+          return callback(null, true);
+        }
+        return callback(new Error("CORS origin forbidden in production"));
+      }
+
+      // In development/test, permit explicitly allowed origins and local addresses
+      if (
+        allowedOrigins.includes(origin) ||
+        origin.startsWith("http://localhost:") ||
+        origin.startsWith("http://127.0.0.1:")
+      ) {
+        return callback(null, true);
+      }
+
+      return callback(new Error("CORS origin rejected"));
+    },
+    methods: ["GET", "POST", "PATCH", "PUT", "DELETE"],
+    credentials: true,
+  };
 
   const io = new Server(httpServer, {
     cors: corsConfig,

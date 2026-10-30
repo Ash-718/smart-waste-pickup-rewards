@@ -12,6 +12,7 @@ import UsersPage from "./pages/UsersPage";
 import RewardsBadgesPage from "./pages/RewardsBadgesPage";
 import LiveFleetPage from "./pages/LiveFleetPage";
 import VehiclesPage from "./pages/VehiclesPage";
+import ReportsPage from "./pages/ReportsPage";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -36,6 +37,14 @@ export default function App() {
               <Route index element={<Navigate to="/dashboard" replace />} />
               <Route path="/dashboard" element={<ImpactDashboardPage />} />
               <Route path="/analytics" element={<AnalyticsPage />} />
+              <Route
+                path="/reports"
+                element={
+                  <ProtectedRoute adminOnly>
+                    <ReportsPage />
+                  </ProtectedRoute>
+                }
+              />
               <Route
                 path="/fleet"
                 element={
