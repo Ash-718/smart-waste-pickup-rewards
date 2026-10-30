@@ -210,3 +210,24 @@ model RewardRedemption {
 
   @@map("reward_redemptions")
 }
+
+model CollectorApplication {
+  id              String    @id @default(uuid())
+  name            String
+  email           String    @unique
+  phone           String    @unique
+  passwordHash    String    @map("password_hash")
+  address         String
+  licenseNumber   String?   @map("license_number")
+  vehicleTypePref String?   @map("vehicle_type_pref")
+  status          String    @default("pending")
+  rejectionReason String?   @map("rejection_reason")
+  reviewedAt      DateTime? @map("reviewed_at")
+  reviewedById    String?   @map("reviewed_by_id")
+  userId          String?   @unique @map("user_id")
+  createdAt       DateTime  @default(now()) @map("created_at")
+  updatedAt       DateTime  @updatedAt @map("updated_at")
+
+  @@map("collector_applications")
+}
+

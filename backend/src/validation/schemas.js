@@ -141,6 +141,20 @@ const createCollectorSchema = z
     path: ["email"],
   });
 
+const collectorApplicationSchema = z.object({
+  name: z.string().trim().min(2, "Full name must be at least 2 characters"),
+  email: z.string().trim().email("Valid email is required"),
+  phone: z.string().trim().min(7, "Phone number must be at least 7 characters"),
+  password: z.string().min(6, "Password must be at least 6 characters"),
+  address: z.string().trim().min(5, "Address must be at least 5 characters"),
+  licenseNumber: z.string().trim().optional().or(z.literal("")),
+  vehicleTypePref: z.string().trim().optional().or(z.literal("")),
+});
+
+const rejectApplicationSchema = z.object({
+  reason: z.string().trim().min(3, "Rejection reason must be at least 3 characters"),
+});
+
 module.exports = {
   registerSchema,
   loginSchema,
@@ -151,4 +165,6 @@ module.exports = {
   createRewardSchema,
   createBadgeSchema,
   createCollectorSchema,
+  collectorApplicationSchema,
+  rejectApplicationSchema,
 };

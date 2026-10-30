@@ -5,6 +5,7 @@ const NAV_ITEMS = [
   { to: "/dashboard", label: "Dashboard Overview", icon: "📊" },
   { to: "/analytics", label: "Analytics & Trends", icon: "📈" },
   { to: "/reports", label: "Reports & Export", icon: "📑", adminOnly: true },
+  { to: "/collector-applications", label: "Collector Applications", icon: "📋", adminOnly: true },
   { to: "/fleet", label: "Live Fleet", icon: "🛰️", adminOnly: true },
   { to: "/vehicles", label: "Vehicles", icon: "🚛", adminOnly: true },
   { to: "/queue", label: "Pickup Queue", icon: "🚚" },

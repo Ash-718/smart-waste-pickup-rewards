@@ -15,6 +15,11 @@ const updateDriverStatusSchema = z.object({
 const getDriverPickups = asyncHandler(async (req, res) => {
   const driverId = req.user.id;
 
+  const user = await prisma.user.findUnique({
+    where: { id: driverId },
+    select: { id: true, name: true, email: true, phone: true, role: true, createdAt: true },
+  });
+
   // Find vehicle assigned to driver
   const vehicle = await prisma.vehicle.findUnique({
     where: { driverId },
@@ -22,8 +27,10 @@ const getDriverPickups = asyncHandler(async (req, res) => {
 
   if (!vehicle) {
     return res.json({
+      driver: user,
       vehicle: null,
       pickups: [],
+      history: [],
     });
   }
 
@@ -43,6 +50,24 @@ const getDriverPickups = asyncHandler(async (req, res) => {
     orderBy: { assignedAt: "desc" },
   });
 
+  // Fetch recent completed / past assignments for this vehicle
+  const pastAssignments = await prisma.pickupAssignment.findMany({
+    where: {
+      vehicleId: vehicle.id,
+      isActive: false,
+    },
+    include: {
+      pickup: {
+        include: {
+          user: { select: { id: true, name: true, phone: true } },
+          pointsLedgerEntry: true,
+        },
+      },
+    },
+    orderBy: { assignedAt: "desc" },
+    take: 20,
+  });
+
   const pickups = activeAssignments.map((a) => ({
     ...a.pickup,
     assignment: {
@@ -53,7 +78,18 @@ const getDriverPickups = asyncHandler(async (req, res) => {
     },
   }));
 
+  const history = pastAssignments.map((a) => ({
+    ...a.pickup,
+    assignment: {
+      id: a.id,
+      assignedAt: a.assignedAt,
+      startedAt: a.startedAt,
+      arrivedAt: a.arrivedAt,
+    },
+  }));
+
   res.json({
+    driver: user,
     vehicle: {
       id: vehicle.id,
       registrationNo: vehicle.registrationNo,
@@ -64,6 +100,7 @@ const getDriverPickups = asyncHandler(async (req, res) => {
       isActive: vehicle.isActive,
     },
     pickups,
+    history,
   });
 });
 

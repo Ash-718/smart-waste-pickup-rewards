@@ -47,7 +47,30 @@ const login = asyncHandler(async (req, res) => {
   const user = await prisma.user.findFirst({
     where: data.email ? { email: data.email } : { phone: data.phone },
   });
-  if (!user) throw new HttpError(401, "Invalid email or password");
+
+  if (!user) {
+    // Check if there is an unapproved or rejected collector application
+    const application = await prisma.collectorApplication.findFirst({
+      where: data.email ? { email: data.email } : { phone: data.phone },
+    });
+
+    if (application) {
+      if (application.status === "pending") {
+        throw new HttpError(
+          403,
+          "Your collector application is currently under review by administrators."
+        );
+      }
+      if (application.status === "rejected") {
+        throw new HttpError(
+          403,
+          `Your collector application was rejected: ${application.rejectionReason || "Requirements not met."}`
+        );
+      }
+    }
+
+    throw new HttpError(401, "Invalid email or password");
+  }
 
   const valid = await bcrypt.compare(data.password, user.passwordHash);
   if (!valid) throw new HttpError(401, "Invalid email or password");

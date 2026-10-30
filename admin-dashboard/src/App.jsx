@@ -13,6 +13,7 @@ import RewardsBadgesPage from "./pages/RewardsBadgesPage";
 import LiveFleetPage from "./pages/LiveFleetPage";
 import VehiclesPage from "./pages/VehiclesPage";
 import ReportsPage from "./pages/ReportsPage";
+import CollectorApplicationsPage from "./pages/CollectorApplicationsPage";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -42,6 +43,14 @@ export default function App() {
                 element={
                   <ProtectedRoute adminOnly>
                     <ReportsPage />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/collector-applications"
+                element={
+                  <ProtectedRoute adminOnly>
+                    <CollectorApplicationsPage />
                   </ProtectedRoute>
                 }
               />

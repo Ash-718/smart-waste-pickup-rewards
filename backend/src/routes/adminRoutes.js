@@ -40,9 +40,22 @@ const {
   deleteVehicle,
 } = require("../controllers/vehicleController");
 
+const {
+  listApplications,
+  getApplication,
+  approveApplication,
+  rejectApplication,
+} = require("../controllers/collectorApplicationController");
+
 // Collector / Staff management
 router.get("/collectors", listCollectors);
 router.post("/collectors", createCollector);
+
+// Collector Onboarding Applications
+router.get("/collector-applications", listApplications);
+router.get("/collector-applications/:id", getApplication);
+router.post("/collector-applications/:id/approve", approveApplication);
+router.post("/collector-applications/:id/reject", rejectApplication);
 
 // Pickup Assignment & Status Updates
 router.post("/pickups/:id/assign", assign);
