@@ -16,7 +16,7 @@ const OSRM_BASE_URL = process.env.OSRM_BASE_URL || "https://router.project-osrm.
 
 // CLI Arguments parsing
 // Supports: --pickup=<id>, --speed=<multiplier>, --gps-loss-at=<sec>, --gps-loss-for=<sec>,
-//           --stop-at-meters=<meters>, --auto-arrive, --email=<email>, --password=<pwd>
+//           --stop-at-meters=<meters>, --auto-arrive, --email=<email>, --password=<pwd>, --multi
 const args = process.argv.slice(2).reduce((acc, arg) => {
   if (arg.startsWith("--")) {
     const [key, val] = arg.slice(2).split("=");
@@ -25,6 +25,7 @@ const args = process.argv.slice(2).reduce((acc, arg) => {
   return acc;
 }, {});
 
+const IS_MULTI_MODE = Boolean(args.multi);
 const TARGET_PICKUP_ID = args.pickup || args.pickupId || null;
 const DRIVER_EMAIL = args.email || process.env.DEMO_COLLECTOR_EMAIL || "demo_collector@example.com";
 const DRIVER_PASSWORD = args.password || process.env.DEMO_COLLECTOR_PASSWORD || "DemoCollector@123";
@@ -73,8 +74,8 @@ function calculateBearing(lat1, lon1, lat2, lon2) {
 /**
  * Fetches real road route from OSRM or falls back to committed cached route.
  */
-async function fetchRoadRoute(startLat, startLng, destLat, destLng) {
-  console.log(`[SIMULATION NOTE] Requesting real road route from OSRM (${OSRM_BASE_URL})...`);
+async function fetchRoadRoute(startLat, startLng, destLat, destLng, tag = "") {
+  const prefix = tag ? `[${tag}] ` : "";
   try {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 3500);
@@ -94,7 +95,7 @@ async function fetchRoadRoute(startLat, startLng, destLat, destLng) {
 
     const route = data.routes[0];
     const coords = route.geometry.coordinates.map(([lng, lat]) => [lat, lng]);
-    console.log(`✓ Fetched OSRM road route: ${(route.distance / 1000).toFixed(2)} km, ${coords.length} waypoints.`);
+    console.log(`${prefix}✓ Fetched OSRM road route: ${(route.distance / 1000).toFixed(2)} km, ${coords.length} waypoints.`);
     return {
       distanceMeters: Math.round(route.distance),
       durationSeconds: Math.round(route.duration),
@@ -102,7 +103,7 @@ async function fetchRoadRoute(startLat, startLng, destLat, destLng) {
       source: "osrm_live",
     };
   } catch (err) {
-    console.warn(`[SIMULATION NOTE] Using cached route (OSRM unavailable: ${err.message}).`);
+    console.warn(`${prefix}[SIMULATION NOTE] Using fallback route (${err.message}).`);
     const cachedPath = path.join(__dirname, "demo-route.json");
     if (fs.existsSync(cachedPath)) {
       const cached = JSON.parse(fs.readFileSync(cachedPath, "utf-8"));
@@ -113,7 +114,7 @@ async function fetchRoadRoute(startLat, startLng, destLat, destLng) {
         source: "cached_fallback",
       };
     }
-    // Fallback: straight segment
+    // Haversine direct line fallback
     return {
       distanceMeters: calculateHaversineMeters(startLat, startLng, destLat, destLng),
       durationSeconds: 300,
@@ -158,7 +159,6 @@ function interpolateAtDistance(points, cumDistances, distMeters) {
     return { lat: points[last][0], lng: points[last][1], heading };
   }
 
-  // Find segment
   let idx = 0;
   while (idx < cumDistances.length - 1 && cumDistances[idx + 1] < distMeters) {
     idx++;
@@ -191,88 +191,89 @@ function findStopDistanceAlongRoute(waypoints, cumDistances, stopAtMeters, destL
   return total;
 }
 
-async function simulate() {
-  console.log("================================================================================");
-  console.log("🚛 [SIMULATED DEMO] WasteWise Live Driver Simulator Starting...");
-  console.log("================================================================================");
-  console.log(`Driver Account:   ${DRIVER_EMAIL}`);
-  console.log(`Speed Config:     ${BASE_SPEED_KMH} km/h (Multiplier: ${SPEED_MULTIPLIER}x -> Effective: ${EFFECTIVE_SPEED_KMH.toFixed(1)} km/h)`);
-  console.log(`Telemetry Rates:  3s moving / 10s stationary heartbeat (respects server throttle)`);
-  console.log(`Stop Condition:   Within ~${STOP_AT_METERS} m of pickup destination`);
-  if (GPS_LOSS_AT !== null && GPS_LOSS_FOR !== null) {
-    console.log(`GPS Loss Mode:    Pause emissions for ${GPS_LOSS_FOR}s starting at T+${GPS_LOSS_AT}s`);
-  }
-  console.log("================================================================================\n");
+/**
+ * Executes the live driving routine for a single collector.
+ */
+async function simulateCollectorDriver({
+  driverEmail,
+  driverPassword,
+  pickupId = null,
+  speedMultiplier = SPEED_MULTIPLIER,
+  autoArrive = AUTO_ARRIVE,
+  gpsLossAt = GPS_LOSS_AT,
+  gpsLossFor = GPS_LOSS_FOR,
+  stopAtMeters = STOP_AT_METERS,
+  tag = "DRIVER",
+}) {
+  const logPrefix = `[${tag}]`;
+  console.log(`${logPrefix} Authenticating via REST as ${driverEmail}...`);
 
   // 1. Driver REST Login
-  console.log(`[1/6] Authenticating as collector (${DRIVER_EMAIL})...`);
   const loginRes = await fetch(`${API_BASE}/auth/login`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ email: DRIVER_EMAIL, password: DRIVER_PASSWORD }),
+    body: JSON.stringify({ email: driverEmail, password: driverPassword }),
   });
 
   if (!loginRes.ok) {
     const err = await loginRes.json();
-    throw new Error(`Driver login failed (${loginRes.status}): ${JSON.stringify(err)}`);
+    throw new Error(`${logPrefix} Login failed (${loginRes.status}): ${JSON.stringify(err)}`);
   }
 
   const { token, user } = await loginRes.json();
-  console.log(`✓ Authenticated: ${user.name} (Role: ${user.role})`);
+  const driverHeaders = { Authorization: `Bearer ${token}` };
+  console.log(`${logPrefix} ✓ Authenticated: ${user.name} (Role: ${user.role})`);
 
   // 2. Fetch driver's active assigned pickups
-  console.log("[2/6] Fetching driver's assigned jobs...");
-  const driverHeaders = { Authorization: `Bearer ${token}` };
   const jobsRes = await fetch(`${API_BASE}/driver/pickups`, { headers: driverHeaders });
   const jobsData = await jobsRes.json();
 
   if (!jobsData.pickups || jobsData.pickups.length === 0) {
     throw new Error(
-      `No active pickups assigned to driver "${user.name}". Run 'npm run demo:seed' first.`
+      `${logPrefix} No active pickups assigned to driver "${user.name}". Run 'npm run demo:seed' first.`
     );
   }
 
-  const targetPickup = TARGET_PICKUP_ID
-    ? jobsData.pickups.find((p) => p.id === TARGET_PICKUP_ID)
+  const targetPickup = pickupId
+    ? jobsData.pickups.find((p) => p.id === pickupId)
     : jobsData.pickups[0];
 
   if (!targetPickup) {
-    throw new Error(`Pickup with ID ${TARGET_PICKUP_ID} not found in driver's assigned jobs.`);
+    throw new Error(`${logPrefix} Pickup with ID ${pickupId} not found in driver's assigned jobs.`);
   }
 
-  console.log(`✓ Target pickup identified: ID ${targetPickup.id}`);
-  console.log(`  Address: ${targetPickup.address}`);
-  console.log(`  Current Status: ${targetPickup.status}`);
-  console.log(`  Vehicle: ${jobsData.vehicle?.registrationNo || "Assigned"}`);
+  const vehicleReg = jobsData.vehicle?.registrationNo || "Vehicle";
+  console.log(`${logPrefix} ✓ Target pickup: #${targetPickup.id.slice(0, 8)} (${targetPickup.wasteType}) on ${vehicleReg}`);
+  console.log(`${logPrefix}   Destination: ${targetPickup.address}`);
 
   // 3. Connect to Socket.IO with JWT Handshake
-  console.log(`[3/6] Connecting to Socket.IO server at ${SOCKET_BASE}...`);
+  console.log(`${logPrefix} Connecting to Socket.IO server at ${SOCKET_BASE}...`);
   const socket = io(SOCKET_BASE, {
     auth: { token },
     transports: ["websocket", "polling"],
   });
 
   await new Promise((resolve, reject) => {
-    const timeout = setTimeout(() => reject(new Error("Socket connection timeout after 10s")), 10000);
+    const timeout = setTimeout(() => reject(new Error(`${logPrefix} Socket connection timeout`)), 10000);
     socket.on("connect", () => {
       clearTimeout(timeout);
-      console.log(`✓ Connected to Socket.IO (Socket ID: ${socket.id})`);
+      console.log(`${logPrefix} ✓ Connected to Socket.IO (Socket ID: ${socket.id})`);
       resolve();
     });
     socket.on("connect_error", (err) => {
       clearTimeout(timeout);
-      reject(new Error(`Socket connection error: ${err.message}`));
+      reject(new Error(`${logPrefix} Socket connection error: ${err.message}`));
     });
   });
 
   // Join pickup room for tracking
   socket.emit("join:pickup", { pickupId: targetPickup.id }, (res) => {
-    console.log(`✓ Joined room for pickup (#${targetPickup.id.slice(0, 8)}):`, res);
+    console.log(`${logPrefix} ✓ Joined room for pickup (#${targetPickup.id.slice(0, 8)}):`, res);
   });
 
   // 4. Start trip transition (on_the_way)
   if (targetPickup.status === "assigned") {
-    console.log("[4/6] Transitioning pickup to 'on_the_way' (trip started)...");
+    console.log(`${logPrefix} Transitioning pickup to 'on_the_way' (trip started)...`);
     const patchRes = await fetch(`${API_BASE}/driver/pickups/${targetPickup.id}/status`, {
       method: "PATCH",
       headers: { ...driverHeaders, "Content-Type": "application/json" },
@@ -280,11 +281,11 @@ async function simulate() {
     });
     if (!patchRes.ok) {
       const err = await patchRes.json();
-      throw new Error(`Failed to start trip: ${JSON.stringify(err)}`);
+      throw new Error(`${logPrefix} Failed to start trip: ${JSON.stringify(err)}`);
     }
-    console.log("✓ Pickup transitioned to 'on_the_way' via server status API.");
+    console.log(`${logPrefix} ✓ Pickup transitioned to 'on_the_way' via server status API.`);
   } else {
-    console.log(`ℹ Pickup already in progress (${targetPickup.status}). Continuing simulation.`);
+    console.log(`${logPrefix} ℹ Pickup already in progress (${targetPickup.status}). Continuing simulation.`);
   }
 
   // 5. Fetch road route and prepare constant speed interpolation
@@ -293,42 +294,36 @@ async function simulate() {
   const startLat = jobsData.vehicle?.currentLat || demoConfig.start.lat;
   const startLng = jobsData.vehicle?.currentLng || demoConfig.start.lng;
 
-  const routeData = await fetchRoadRoute(startLat, startLng, destLat, destLng);
+  const routeData = await fetchRoadRoute(startLat, startLng, destLat, destLng, tag);
   const waypoints = routeData.coordinates;
   const cumDistances = buildCumulativeDistances(waypoints);
   const totalRouteMeters = cumDistances[cumDistances.length - 1];
 
-  const targetStopDistMeters = findStopDistanceAlongRoute(waypoints, cumDistances, STOP_AT_METERS, destLat, destLng);
+  const targetStopDistMeters = findStopDistanceAlongRoute(waypoints, cumDistances, stopAtMeters, destLat, destLng);
 
-  console.log(`\n[5/6] Driving along road route (${(totalRouteMeters / 1000).toFixed(2)} km total):`);
-  console.log(`  Start: (${startLat.toFixed(4)}, ${startLng.toFixed(4)})`);
-  console.log(`  Destination: (${destLat.toFixed(4)}, ${destLng.toFixed(4)})`);
-  console.log(`  Stop threshold: ~${STOP_AT_METERS} m from destination (at ${(targetStopDistMeters / 1000).toFixed(2)} km along route)\n`);
+  console.log(`${logPrefix} Driving along route: ${(totalRouteMeters / 1000).toFixed(2)} km total (Stop at ~${stopAtMeters}m from dest)`);
 
-  const metersPerSec = (EFFECTIVE_SPEED_KMH * 1000) / 3600;
+  const effectiveSpeedKmh = BASE_SPEED_KMH * speedMultiplier;
+  const metersPerSec = (effectiveSpeedKmh * 1000) / 3600;
   const metersPerStep = metersPerSec * INTERVAL_SECONDS;
 
   let currentDistMeters = 0;
   let elapsedSec = 0;
   let finalDistFromDest = 999999;
-  let lastEmittedTelemetry = null;
 
   while (currentDistMeters < targetStopDistMeters) {
-    // Check if in GPS loss window
     const inGpsLoss =
-      GPS_LOSS_AT !== null &&
-      GPS_LOSS_FOR !== null &&
-      elapsedSec >= GPS_LOSS_AT &&
-      elapsedSec < GPS_LOSS_AT + GPS_LOSS_FOR;
+      gpsLossAt !== null &&
+      gpsLossFor !== null &&
+      elapsedSec >= gpsLossAt &&
+      elapsedSec < gpsLossAt + gpsLossFor;
 
     const currentPos = interpolateAtDistance(waypoints, cumDistances, currentDistMeters);
     finalDistFromDest = calculateHaversineMeters(currentPos.lat, currentPos.lng, destLat, destLng);
 
     if (inGpsLoss) {
-      const remainingLoss = Math.round(GPS_LOSS_AT + GPS_LOSS_FOR - elapsedSec);
-      console.log(
-        `  [T+${elapsedSec}s] ⚠️  [SIMULATED GPS LOSS] Signal suppressed (${remainingLoss}s remaining). No location emitted.`
-      );
+      const remainingLoss = Math.round(gpsLossAt + gpsLossFor - elapsedSec);
+      console.log(`${logPrefix} [T+${elapsedSec}s] ⚠️ [GPS LOSS] Signal suppressed (${remainingLoss}s remaining).`);
     } else {
       const telemetry = {
         lat: currentPos.lat,
@@ -339,14 +334,13 @@ async function simulate() {
 
       socket.emit("driver:location", telemetry, (ack) => {
         if (ack?.error) {
-          console.error("  [Socket Ack Error]:", ack.error);
+          console.error(`${logPrefix} [Socket Ack Error]:`, ack.error);
         }
       });
-      lastEmittedTelemetry = telemetry;
 
       const progressPct = Math.min(100, Math.round((currentDistMeters / totalRouteMeters) * 100));
       console.log(
-        `  [T+${elapsedSec}s] (${progressPct}%) -> Lat: ${telemetry.lat.toFixed(5)}, Lng: ${telemetry.lng.toFixed(5)}, Speed: ${telemetry.speed} km/h, Heading: ${telemetry.heading}°, Dist to Pickup: ${finalDistFromDest}m`
+        `${logPrefix} [T+${elapsedSec}s] (${progressPct}%) -> (${telemetry.lat.toFixed(5)}, ${telemetry.lng.toFixed(5)}) • ${telemetry.speed} km/h • Head: ${telemetry.heading}° • Dist: ${finalDistFromDest}m`
       );
     }
 
@@ -355,40 +349,27 @@ async function simulate() {
     elapsedSec += INTERVAL_SECONDS;
   }
 
-  // Clamp to exact target stop point
+  // Final stop point
   currentDistMeters = targetStopDistMeters;
   const finalPos = interpolateAtDistance(waypoints, cumDistances, currentDistMeters);
   finalDistFromDest = calculateHaversineMeters(finalPos.lat, finalPos.lng, destLat, destLng);
-  console.log(`\n📍 [SIMULATED DEMO] Stopped vehicle position: (${finalPos.lat.toFixed(5)}, ${finalPos.lng.toFixed(5)}).`);
-  console.log(`   Distance to pickup: ~${finalDistFromDest} meters (Arrival radius threshold is 300m).`);
+  console.log(`\n${logPrefix} 📍 Stopped at (${finalPos.lat.toFixed(5)}, ${finalPos.lng.toFixed(5)}) - ~${finalDistFromDest}m to destination (Allowed radius: 300m).`);
 
-  const inGpsLossAtEnd =
-    GPS_LOSS_AT !== null &&
-    GPS_LOSS_FOR !== null &&
-    elapsedSec >= GPS_LOSS_AT &&
-    elapsedSec < GPS_LOSS_AT + GPS_LOSS_FOR;
+  // Allow rate-limit window to settle before final stationary telemetry
+  await new Promise((r) => setTimeout(r, 3100));
+  const finalTelemetry = {
+    lat: finalPos.lat,
+    lng: finalPos.lng,
+    speed: 0,
+    heading: finalPos.heading,
+  };
+  await new Promise((resolve) => {
+    socket.emit("driver:location", finalTelemetry, (ack) => resolve(ack));
+  });
 
-  if (!inGpsLossAtEnd) {
-    // Wait for the server rate-limit window to clear
-    await new Promise((r) => setTimeout(r, 3100));
-    const finalTelemetry = {
-      lat: finalPos.lat,
-      lng: finalPos.lng,
-      speed: 0,
-      heading: finalPos.heading,
-    };
-    await new Promise((resolve) => {
-      socket.emit("driver:location", finalTelemetry, (ack) => {
-        if (ack?.error) console.error("  [Stop Telemetry Ack Error]:", ack.error);
-        resolve(ack);
-      });
-    });
-    lastEmittedTelemetry = finalTelemetry;
-  }
-
-  // 6. Arrival & Completion handling
-  if (AUTO_ARRIVE) {
-    console.log("\n[6/6] Auto-arrive enabled: Calling real server PATCH arrived endpoint...");
+  // 6. Arrival & Completion
+  if (autoArrive) {
+    console.log(`${logPrefix} Auto-arrive enabled: Calling real server PATCH arrived endpoint...`);
     const arrivedRes = await fetch(`${API_BASE}/driver/pickups/${targetPickup.id}/status`, {
       method: "PATCH",
       headers: { ...driverHeaders, "Content-Type": "application/json" },
@@ -396,14 +377,13 @@ async function simulate() {
     });
 
     const arrivedBody = await arrivedRes.json();
-    console.log(`Server HTTP Response [${arrivedRes.status}]:`, JSON.stringify(arrivedBody, null, 2));
+    console.log(`${logPrefix} Arrival Response [${arrivedRes.status}]:`, arrivedBody.pickup?.status || arrivedBody.error);
 
     if (arrivedRes.ok) {
-      console.log("✓ Successfully marked arrived!");
-      console.log("⏳ Simulating waste loading & weighing (3s)...");
+      console.log(`${logPrefix} ✓ Successfully marked arrived! Simulating scale measurement (3s)...`);
       await new Promise((r) => setTimeout(r, 3000));
 
-      console.log("🎉 Calling real server PATCH completed endpoint with waste weight (5.0 kg)...");
+      console.log(`${logPrefix} 🎉 Calling real server PATCH completed endpoint with measured weight (5.0 kg)...`);
       const completeRes = await fetch(`${API_BASE}/driver/pickups/${targetPickup.id}/status`, {
         method: "PATCH",
         headers: { ...driverHeaders, "Content-Type": "application/json" },
@@ -411,47 +391,103 @@ async function simulate() {
       });
 
       const completeBody = await completeRes.json();
-      console.log(`Server HTTP Response [${completeRes.status}]:`, JSON.stringify(completeBody, null, 2));
-
-      if (completeRes.ok) {
-        console.log("================================================================================");
-        console.log("✅ [SIMULATED DEMO] PICKUP COMPLETED SUCCESSFULLY!");
-        console.log(`   Points Awarded: +${completeBody.pointsEarned || 25} Green Points`);
-        console.log("================================================================================");
-      }
+      console.log(`${logPrefix} ✅ Pickup Completed! Points Awarded: +${completeBody.pointsEarned || 25} Green Points`);
     } else {
-      console.log(`ℹ Arrival check rejected as expected by server geofence or stale check: HTTP ${arrivedRes.status}`);
+      console.log(`${logPrefix} ℹ Arrival check rejected as expected by server geofence or stale check.`);
     }
-    socket.disconnect();
-    process.exit(0);
-  } else {
-    console.log(`\n[6/6] Stopped at destination (~${finalDistFromDest}m away).`);
-    console.log(`Transmitting stationary heartbeat every ${HEARTBEAT_SECONDS}s. Press Ctrl+C to terminate simulator.`);
-    console.log("Tip: Run with '--auto-arrive' to automatically verify arrival and record completion.\n");
 
-    const heartbeatInterval = setInterval(() => {
-      const hbTelemetry = {
-        lat: finalPos.lat,
-        lng: finalPos.lng,
-        speed: 0,
-        heading: finalPos.heading,
-      };
-      socket.emit("driver:location", hbTelemetry, (ack) => {
-        if (ack?.error) console.error("  [Heartbeat Ack Error]:", ack.error);
-      });
-      console.log(`  [Heartbeat] Transmitted stationary telemetry at (${finalPos.lat.toFixed(5)}, ${finalPos.lng.toFixed(5)}) - 0 km/h`);
+    socket.disconnect();
+    return { success: true, vehicleReg };
+  } else {
+    console.log(`${logPrefix} Transmitting stationary heartbeats every ${HEARTBEAT_SECONDS}s. Press Ctrl+C to terminate.`);
+    const heartbeat = setInterval(() => {
+      socket.emit("driver:location", finalTelemetry);
     }, HEARTBEAT_SECONDS * 1000);
 
-    process.on("SIGINT", () => {
-      clearInterval(heartbeatInterval);
-      socket.disconnect();
-      console.log("\nSimulator terminated cleanly. Socket disconnected.");
-      process.exit(0);
+    return new Promise((resolve) => {
+      process.on("SIGINT", () => {
+        clearInterval(heartbeat);
+        socket.disconnect();
+        console.log(`${logPrefix} Disconnected.`);
+        resolve({ terminated: true });
+      });
     });
   }
 }
 
-simulate().catch((err) => {
+/**
+ * Main simulation runner: Supports Single-Driver and Multi-Driver concurrent modes.
+ */
+async function main() {
+  console.log("================================================================================");
+  console.log(`🚛 [SIMULATED DEMO] WasteWise Live Fleet Simulator (${IS_MULTI_MODE ? "MULTI-VEHICLE FLEET MODE" : "SINGLE VEHICLE MODE"})`);
+  console.log("================================================================================");
+  console.log(`Speed Config:     Multiplier ${SPEED_MULTIPLIER}x (Effective speed: ${EFFECTIVE_SPEED_KMH.toFixed(1)} km/h)`);
+  console.log(`Telemetry Rates:  3s moving / 10s stationary (Production rate limits respected)`);
+  console.log(`Stop Condition:   Within ~${STOP_AT_METERS}m of pickup destination`);
+  console.log(`Auto-Arrive:      ${AUTO_ARRIVE ? "ENABLED (Will mark arrived and completed)" : "DISABLED (Will stream stationary heartbeats)"}`);
+  console.log("================================================================================\n");
+
+  if (IS_MULTI_MODE) {
+    // Multi-vehicle concurrent simulation
+    // Simulates 2 distinct trucks driving concurrently to demonstrate live fleet telemetry
+    const multiDrivers = [
+      {
+        tag: "TRUCK-01",
+        driverEmail: "demo_collector@example.com",
+        driverPassword: "DemoCollector@123",
+      },
+      {
+        tag: "TRUCK-02",
+        driverEmail: "demo_collector_suresh@example.com",
+        driverPassword: "DemoCollector@123",
+      },
+    ];
+
+    console.log(`🚀 Launching ${multiDrivers.length} concurrent simulated drivers on the road network...\n`);
+
+    const results = await Promise.allSettled(
+      multiDrivers.map((driver) =>
+        simulateCollectorDriver({
+          ...driver,
+          speedMultiplier: SPEED_MULTIPLIER,
+          autoArrive: AUTO_ARRIVE,
+          stopAtMeters: STOP_AT_METERS,
+        })
+      )
+    );
+
+    console.log("\n================================================================================");
+    console.log("🏁 [SIMULATED DEMO] Multi-Vehicle Simulation Complete!");
+    for (let i = 0; i < results.length; i++) {
+      const res = results[i];
+      const driver = multiDrivers[i];
+      if (res.status === "fulfilled") {
+        console.log(`  ✓ ${driver.tag} (${driver.driverEmail}): Finished successfully.`);
+      } else {
+        console.error(`  ❌ ${driver.tag} (${driver.driverEmail}): ${res.reason?.message || res.reason}`);
+      }
+    }
+    console.log("================================================================================\n");
+    process.exit(0);
+  } else {
+    // Single-vehicle simulation (Preserves full backward compatibility)
+    await simulateCollectorDriver({
+      driverEmail: DRIVER_EMAIL,
+      driverPassword: DRIVER_PASSWORD,
+      pickupId: TARGET_PICKUP_ID,
+      speedMultiplier: SPEED_MULTIPLIER,
+      autoArrive: AUTO_ARRIVE,
+      gpsLossAt: GPS_LOSS_AT,
+      gpsLossFor: GPS_LOSS_FOR,
+      stopAtMeters: STOP_AT_METERS,
+      tag: "DEMO-TRUCK-01",
+    });
+    process.exit(0);
+  }
+}
+
+main().catch((err) => {
   console.error("\n❌ Simulator Error:", err.message);
   process.exit(1);
 });
