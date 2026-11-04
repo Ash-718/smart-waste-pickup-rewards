@@ -40,7 +40,7 @@ function initSocketServer(httpServer) {
 
       // In production, strictly enforce configured allowlist
       if (process.env.NODE_ENV === "production") {
-        if (allowedOrigins.includes(origin)) {
+        if (allowedOrigins.includes(origin) || allowedOrigins.includes("*") || origin.endsWith(".vercel.app")) {
           return callback(null, true);
         }
         return callback(new Error("CORS origin forbidden in production"));

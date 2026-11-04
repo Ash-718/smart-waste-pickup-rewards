@@ -29,7 +29,21 @@ app.disable("x-powered-by");
 const allowedOrigins = (process.env.CORS_ORIGIN || "").split(",").filter(Boolean);
 app.use(
   cors({
-    origin: allowedOrigins.length ? allowedOrigins : true,
+    origin: (origin, callback) => {
+      if (!origin) return callback(null, true);
+      const clean = origin.replace(/\/$/, "");
+      const normalizedAllowed = allowedOrigins.map((s) => s.trim().replace(/\/$/, ""));
+      if (
+        normalizedAllowed.length === 0 ||
+        normalizedAllowed.includes("*") ||
+        normalizedAllowed.includes(clean) ||
+        clean.endsWith(".vercel.app")
+      ) {
+        return callback(null, true);
+      }
+      return callback(new Error(`Not allowed by CORS: ${origin}`));
+    },
+    credentials: true,
   })
 );
 app.use(express.json());
