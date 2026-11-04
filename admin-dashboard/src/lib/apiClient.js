@@ -1,5 +1,7 @@
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "http://localhost:4000/api";
-const SOCKET_BASE_URL = import.meta.env.VITE_SOCKET_BASE_URL || "http://localhost:4000";
+
+const RAW_API_URL = import.meta.env.VITE_API_BASE_URL || "/api";
+const API_BASE_URL = RAW_API_URL.replace(/\/+$/, "");
+const SOCKET_BASE_URL = (import.meta.env.VITE_SOCKET_BASE_URL || "https://smart-waste-pickup-rewards.onrender.com").replace(/\/+$/, "");
 
 class ApiError extends Error {
   constructor(message, status, details) {
