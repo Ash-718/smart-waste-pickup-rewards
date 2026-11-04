@@ -3,7 +3,7 @@ import { StyleSheet, View, Text, ActivityIndicator, TouchableOpacity, Platform }
 import { WebView } from "react-native-webview";
 import { colors } from "../theme/colors";
 
-const OSM_STANDARD_TILE_URL = "https://tile.openstreetmap.org/{z}/{x}/{y}.png";
+const OSM_STANDARD_TILE_URL = "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png";
 const rawEnvTile = process.env.EXPO_PUBLIC_TILE_URL;
 // Strictly enforce OpenStreetMap standard tile URL and reject any Carto / basemaps URLs
 const DEFAULT_TILE_URL =
@@ -67,9 +67,9 @@ function generateLeafletHtml(tileUrl) {
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
-  <meta http-equiv="Pragma" content="no-cache" />
-  <meta http-equiv="Expires" content="0" />
+
+
+
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css" />
   <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
   <style>
@@ -362,6 +362,9 @@ function generateLeafletHtml(tileUrl) {
         tileLayer = L.tileLayer('${safeTileUrl}', {
           maxZoom: 19,
           subdomains: ['a', 'b', 'c'],
+          keepBuffer: 6,
+          updateWhenIdle: false,
+          updateWhenZooming: false,
           attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
         }).addTo(map);
 
