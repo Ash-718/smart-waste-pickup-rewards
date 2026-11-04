@@ -1,5 +1,5 @@
 import React, { Component } from "react";
-import { StyleSheet, Text, View } from "react-native";
+import { StyleSheet, Text, View, Platform } from "react-native";
 import Button from "./Button";
 import { colors } from "../theme/colors";
 
@@ -8,7 +8,7 @@ import { colors } from "../theme/colors";
 // leaves the native shell showing whatever was on screen (often the splash
 // spinner) with no indication anything went wrong.
 export default class ErrorBoundary extends Component {
-  state = { error: null };
+  state = { error: null, stack: null };
 
   static getDerivedStateFromError(error) {
     return { error };
@@ -16,15 +16,29 @@ export default class ErrorBoundary extends Component {
 
   componentDidCatch(error, info) {
     console.error("Unhandled render error:", error, info?.componentStack);
+    this.setState({ stack: info?.componentStack || error?.stack || null });
   }
+
+  handleReload = () => {
+    if (Platform.OS === "web" && typeof window !== "undefined") {
+      window.location.reload();
+    } else {
+      this.setState({ error: null, stack: null });
+    }
+  };
 
   render() {
     if (this.state.error) {
       return (
         <View style={styles.container}>
           <Text style={styles.title}>Something went wrong</Text>
-          <Text style={styles.message}>{this.state.error.message}</Text>
-          <Button title="Try again" onPress={() => this.setState({ error: null })} />
+          <Text style={styles.message}>{this.state.error?.message || "An unexpected error occurred"}</Text>
+          {this.state.stack ? (
+            <Text style={styles.stack} numberOfLines={6}>
+              {this.state.stack}
+            </Text>
+          ) : null}
+          <Button title="Reload App" onPress={this.handleReload} />
         </View>
       );
     }
@@ -47,9 +61,18 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   message: {
-    color: colors.neutral500,
+    color: colors.neutral600,
     fontSize: 13,
+    marginBottom: 12,
+    textAlign: "center",
+    fontWeight: "600",
+  },
+  stack: {
+    color: colors.neutral400,
+    fontSize: 11,
     marginBottom: 20,
     textAlign: "center",
+    fontFamily: Platform.OS === "web" ? "monospace" : undefined,
+    paddingHorizontal: 12,
   },
 });
