@@ -117,7 +117,7 @@ function MapCenterController({ selectedCoords }) {
 }
 
 export default function LiveFleetMap({ vehicles = [], selectedVehicleId, onSelectVehicle, isDemoMode = false }) {
-  const defaultCenter = [16.8580, 74.6150]; // Default to Sangli / Miraj Operations Zone
+  const defaultCenter = [16.8524, 74.5815]; // Sangli City Center
   const selectedVehicle = vehicles.find((v) => v.id === selectedVehicleId);
   const selectedCoords = selectedVehicle?.location?.lat
     ? { lat: selectedVehicle.location.lat, lng: selectedVehicle.location.lng }

@@ -70,6 +70,10 @@ function generateLeafletHtml(tileUrl) {
 
 
 
+  <link rel="dns-prefetch" href="https://cdnjs.cloudflare.com" />
+  <link rel="dns-prefetch" href="https://tile.openstreetmap.org" />
+  <link rel="preconnect" href="https://cdnjs.cloudflare.com" crossorigin />
+  <link rel="preconnect" href="https://tile.openstreetmap.org" crossorigin />
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css" />
   <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
   <style>
@@ -351,21 +355,31 @@ function generateLeafletHtml(tileUrl) {
 
     function initMap() {
       try {
+        // Sangli - Miraj Dedicated Operational Zone
+        var SANGLI_CENTER = [16.8524, 74.5815]; // Sangli City Center
+        var SANGLI_BOUNDS = L.latLngBounds([16.7500, 74.4500], [16.9500, 74.7200]);
+
         map = L.map('map', {
           zoomControl: false,
-          attributionControl: true
-        }).setView([16.8580, 74.6150], 13);
+          attributionControl: true,
+          minZoom: 11,
+          maxZoom: 18,
+          maxBounds: SANGLI_BOUNDS.pad(0.2),
+          maxBoundsViscosity: 0.8
+        }).setView(SANGLI_CENTER, 14);
 
-        console.log("[Leaflet WebView] Initializing tileLayer with URL:", "${safeTileUrl}");
+        console.log("[Leaflet WebView] Fast Sangli tileLayer init:", "${safeTileUrl}");
         sendToRN({ type: 'tileInfo', url: '${safeTileUrl}' });
 
         tileLayer = L.tileLayer('${safeTileUrl}', {
-          maxZoom: 19,
+          maxZoom: 18,
+          minZoom: 11,
           subdomains: ['a', 'b', 'c'],
-          keepBuffer: 6,
-          updateWhenIdle: false,
+          keepBuffer: 12,
+          updateWhenIdle: true,
           updateWhenZooming: false,
-          attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+          crossOrigin: true,
+          attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
         }).addTo(map);
 
         tileLayer.on('tileerror', function() {
@@ -439,6 +453,14 @@ const LeafletMap = forwardRef(function LeafletMap(
   const [hasError, setHasError] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
   const [reloadKey, setReloadKey] = useState(0);
+
+  // Auto-reveal map after 2.5s so slow network tiles never block the interface
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setIsReady(true);
+    }, 2500);
+    return () => clearTimeout(timer);
+  }, [reloadKey]);
 
   // Memoize HTML string so it is NOT re-created on each render
   const htmlContent = useMemo(() => {
@@ -584,10 +606,10 @@ const LeafletMap = forwardRef(function LeafletMap(
         originWhitelist={["https://*", "about:blank"]}
         source={{ html: htmlContent }}
         javaScriptEnabled={true}
-        domStorageEnabled={false}
-        cacheEnabled={false}
-        incognito={true}
-        cacheMode="LOAD_NO_CACHE"
+        domStorageEnabled={true}
+        cacheEnabled={true}
+        incognito={false}
+        cacheMode="LOAD_DEFAULT"
         onMessage={handleWebViewMessage}
         onError={() => {
           setHasError(true);
