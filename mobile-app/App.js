@@ -60,6 +60,9 @@ export default function App() {
       console.warn("[App] Font preloading error:", err);
       setFontError(err);
     } finally {
+      if (Platform.OS === "web") {
+        setFontsLoaded(true);
+      }
       await SplashScreen.hideAsync().catch(() => {});
       setRetrying(false);
     }
@@ -106,7 +109,11 @@ export default function App() {
 
   // Still waiting on splash screen
   if (!fontsLoaded) {
-    return null;
+    return (
+      <View style={{ flex: 1, justifyContent: "center", alignItems: "center", backgroundColor: colors.background }}>
+        <ActivityIndicator size="large" color={colors.brand600} />
+      </View>
+    );
   }
 
   return (
