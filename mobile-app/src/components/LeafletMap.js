@@ -454,6 +454,7 @@ const LeafletMap = forwardRef(function LeafletMap(
   ref
 ) {
   const webViewRef = useRef(null);
+  const iframeRef = useRef(null);
   const [isReady, setIsReady] = useState(false);
   const [hasError, setHasError] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
@@ -471,6 +472,53 @@ const LeafletMap = forwardRef(function LeafletMap(
   const htmlContent = useMemo(() => {
     return generateLeafletHtml(DEFAULT_TILE_URL);
   }, []);
+
+  // Validate onMessage payloads
+  const handleWebViewMessage = useCallback(
+    (event) => {
+      if (!event || !event.nativeEvent || typeof event.nativeEvent.data !== "string") {
+        return;
+      }
+      let data;
+      try {
+        data = JSON.parse(event.nativeEvent.data);
+      } catch (err) {
+        console.warn("[LeafletMap] Failed to parse bridge message JSON:", err);
+        return;
+      }
+      if (!data || typeof data !== "object" || typeof data.type !== "string") {
+        console.warn("[LeafletMap] Invalid message format:", data);
+        return;
+      }
+
+      switch (data.type) {
+        case "ready":
+          setIsReady(true);
+          setHasError(false);
+          if (onReady) onReady();
+          break;
+        case "error":
+          setHasError(true);
+          setErrorMessage(typeof data.message === "string" ? data.message : "Failed to load map");
+          if (onError) onError(data.message);
+          break;
+        case "tilefail":
+          setHasError(true);
+          setErrorMessage("Map tiles could not be loaded. Please check your internet connection.");
+          if (onError) onError("Tile loading failed");
+          break;
+        case "tileInfo":
+          console.log("[LeafletMap Diagnostic] Runtime tile URL used by Leaflet WebView:", data.url);
+          break;
+        case "recentered":
+          if (onRecenter) onRecenter();
+          break;
+        default:
+          break;
+      }
+    },
+    [onReady, onError, onRecenter]
+  );
 
   const postBridgeMessage = useCallback((data) => {
     if (Platform.OS === "web") {
@@ -520,52 +568,7 @@ const LeafletMap = forwardRef(function LeafletMap(
     [postBridgeMessage]
   );
 
-  // Validate onMessage payloads
-  const handleWebViewMessage = useCallback(
-    (event) => {
-      if (!event || !event.nativeEvent || typeof event.nativeEvent.data !== "string") {
-        return;
-      }
-      let data;
-      try {
-        data = JSON.parse(event.nativeEvent.data);
-      } catch (err) {
-        console.warn("[LeafletMap] Failed to parse bridge message JSON:", err);
-        return;
-      }
-      if (!data || typeof data !== "object" || typeof data.type !== "string") {
-        console.warn("[LeafletMap] Invalid message format:", data);
-        return;
-      }
 
-      switch (data.type) {
-        case "ready":
-          setIsReady(true);
-          setHasError(false);
-          if (onReady) onReady();
-          break;
-        case "error":
-          setHasError(true);
-          setErrorMessage(typeof data.message === "string" ? data.message : "Failed to load map");
-          if (onError) onError(data.message);
-          break;
-        case "tilefail":
-          setHasError(true);
-          setErrorMessage("Map tiles could not be loaded. Please check your internet connection.");
-          if (onError) onError("Tile loading failed");
-          break;
-        case "tileInfo":
-          console.log("[LeafletMap Diagnostic] Runtime tile URL used by Leaflet WebView:", data.url);
-          break;
-        case "recentered":
-          if (onRecenter) onRecenter();
-          break;
-        default:
-          break;
-      }
-    },
-    [onReady, onError, onRecenter]
-  );
 
   // Sanitized vehicle numbers
   const sanitizedVehicle = useMemo(() => {
