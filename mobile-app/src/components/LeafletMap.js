@@ -122,7 +122,6 @@ function generateLeafletHtml(tileUrl) {
         window.parent.postMessage(str, "*");
       }
     }
-    }
 
     var map = null;
     var tileLayer = null;
