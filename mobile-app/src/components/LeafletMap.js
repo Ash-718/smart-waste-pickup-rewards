@@ -114,9 +114,14 @@ function generateLeafletHtml(tileUrl) {
   <div id="map"></div>
   <script>
     function sendToRN(data) {
+      var str = JSON.stringify(data);
       if (window.ReactNativeWebView && window.ReactNativeWebView.postMessage) {
-        window.ReactNativeWebView.postMessage(JSON.stringify(data));
+        window.ReactNativeWebView.postMessage(str);
       }
+      if (window.parent && window.parent !== window) {
+        window.parent.postMessage(str, "*");
+      }
+    }
     }
 
     var map = null;
@@ -468,9 +473,12 @@ const LeafletMap = forwardRef(function LeafletMap(
   }, []);
 
   const postBridgeMessage = useCallback((data) => {
-    if (webViewRef.current) {
+    if (Platform.OS === "web") {
+      if (iframeRef.current && iframeRef.current.contentWindow) {
+        iframeRef.current.contentWindow.postMessage(JSON.stringify(data), "*");
+      }
+    } else if (webViewRef.current) {
       const jsonString = JSON.stringify(data);
-      // Safely inject JSON via JSON.stringify to prevent script injection vulnerabilities
       const script = `(function() {
         try {
           var event = { data: ${JSON.stringify(jsonString)} };
@@ -484,6 +492,22 @@ const LeafletMap = forwardRef(function LeafletMap(
       webViewRef.current.injectJavaScript(script);
     }
   }, []);
+
+  // Web platform message listener from iframe
+  useEffect(() => {
+    if (Platform.OS !== "web") return;
+    const handleWindowMessage = (e) => {
+      if (!e || typeof e.data !== "string") return;
+      try {
+        const parsed = JSON.parse(e.data);
+        if (parsed && typeof parsed === "object" && typeof parsed.type === "string") {
+          handleWebViewMessage({ nativeEvent: { data: e.data } });
+        }
+      } catch (_) {}
+    };
+    window.addEventListener("message", handleWindowMessage);
+    return () => window.removeEventListener("message", handleWindowMessage);
+  }, [handleWebViewMessage]);
 
   // Expose recenter method to parent
   useImperativeHandle(
@@ -600,25 +624,49 @@ const LeafletMap = forwardRef(function LeafletMap(
 
   return (
     <View style={[styles.container, style]}>
-      <WebView
-        key={reloadKey}
-        ref={webViewRef}
-        originWhitelist={["https://*", "about:blank"]}
-        source={{ html: htmlContent }}
-        javaScriptEnabled={true}
-        domStorageEnabled={true}
-        cacheEnabled={true}
-        incognito={false}
-        cacheMode="LOAD_DEFAULT"
-        onMessage={handleWebViewMessage}
-        onError={() => {
-          setHasError(true);
-          setErrorMessage("Failed to load map component");
-        }}
-        style={styles.webView}
-        scrollEnabled={false}
-        overScrollMode="never"
-      />
+      {Platform.OS === "web" ? (
+        <iframe
+          key={reloadKey}
+          ref={iframeRef}
+          srcDoc={htmlContent}
+          title="Leaflet Map"
+          style={{
+            width: "100%",
+            height: "100%",
+            border: "none",
+            position: "absolute",
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            backgroundColor: "#F8FAFC",
+          }}
+          onLoad={() => {
+            setIsReady(true);
+            setHasError(false);
+          }}
+        />
+      ) : (
+        <WebView
+          key={reloadKey}
+          ref={webViewRef}
+          originWhitelist={["https://*", "about:blank"]}
+          source={{ html: htmlContent }}
+          javaScriptEnabled={true}
+          domStorageEnabled={true}
+          cacheEnabled={true}
+          incognito={false}
+          cacheMode="LOAD_DEFAULT"
+          onMessage={handleWebViewMessage}
+          onError={() => {
+            setHasError(true);
+            setErrorMessage("Failed to load map component");
+          }}
+          style={styles.webView}
+          scrollEnabled={false}
+          overScrollMode="never"
+        />
+      )}
 
       {/* Loading Overlay */}
       {!isReady && !hasError && (
