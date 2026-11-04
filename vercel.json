@@ -1,0 +1,14 @@
+{
+  "buildCommand": "cd admin-dashboard && npm install && npm run build",
+  "outputDirectory": "admin-dashboard/dist",
+  "rewrites": [
+    {
+      "source": "/api/:path*",
+      "destination": "https://smart-waste-pickup-rewards.onrender.com/api/:path*"
+    },
+    {
+      "source": "/(.*)",
+      "destination": "/index.html"
+    }
+  ]
+}
