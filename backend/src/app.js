@@ -19,6 +19,7 @@ const trackingRoutes = require("./routes/trackingRoutes");
 const driverRoutes = require("./routes/driverRoutes");
 const reportRoutes = require("./routes/reportRoutes");
 const collectorApplicationRoutes = require("./routes/collectorApplicationRoutes");
+const simulationRoutes = require("./routes/simulationRoutes");
 
 const app = express();
 app.disable("x-powered-by");
@@ -74,6 +75,7 @@ app.use("/api/meta", metaRoutes);
 app.use("/api/uploads", uploadRoutes);
 app.use("/api/reports", reportRoutes);
 app.use("/api/collector-applications", collectorApplicationRoutes);
+app.use("/api/simulation", simulationRoutes);
 
 app.use((req, res) => res.status(404).json({ error: "Not found" }));
 app.use(errorHandler);

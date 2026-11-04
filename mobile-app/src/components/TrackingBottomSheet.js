@@ -32,6 +32,9 @@ function TrackingBottomSheet({
   telemetryAgeSec,
   demoMode = false,
   onCancelPickup,
+  isSimulating = false,
+  simLoading = false,
+  onToggleSimulation = null,
 }) {
   const sheetRef = useRef(null);
   const insets = useSafeAreaInsets();
@@ -186,6 +189,34 @@ function TrackingBottomSheet({
             ) : null}
           </View>
         </View>
+
+        {/* Virtual Driver Simulation Action Card */}
+        {onToggleSimulation && ["assigned", "on_the_way"].includes(status) && (
+          <TouchableOpacity
+            style={[styles.simCard, isSimulating && styles.simCardActive]}
+            onPress={onToggleSimulation}
+            disabled={simLoading}
+            activeOpacity={0.8}
+          >
+            <View style={[styles.simIconWrap, isSimulating && styles.simIconWrapActive]}>
+              <Ionicons
+                name={isSimulating ? "pause" : "play"}
+                size={16}
+                color={isSimulating ? colors.white : colors.brand700}
+              />
+            </View>
+            <View style={{ flex: 1, marginLeft: 10 }}>
+              <Text style={[styles.simTitle, isSimulating && styles.simTitleActive]}>
+                {isSimulating ? "Virtual GPS Active (Driver Moving)" : "Start Virtual GPS Simulation"}
+              </Text>
+              <Text style={[styles.simDesc, isSimulating && styles.simDescActive]}>
+                {isSimulating
+                  ? "Emitting 30 km/h coordinates live • Updating ETA"
+                  : "Simulate a live driver moving along roads to your location"}
+              </Text>
+            </View>
+          </TouchableOpacity>
+        )}
 
         {/* Snap Toggle Helper Pill */}
         <View style={styles.toggleRow}>
@@ -527,6 +558,47 @@ const styles = StyleSheet.create({
     flex: 1,
     textAlign: "right",
     marginLeft: 12,
+  },
+  simCard: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#ECFDF5",
+    borderWidth: 1.5,
+    borderColor: colors.brand500,
+    borderRadius: 14,
+    padding: 12,
+    marginVertical: 10,
+  },
+  simCardActive: {
+    backgroundColor: colors.brand600,
+    borderColor: colors.brand700,
+  },
+  simIconWrap: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: colors.white,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  simIconWrapActive: {
+    backgroundColor: "rgba(255,255,255,0.25)",
+  },
+  simTitle: {
+    fontSize: 13,
+    fontWeight: "700",
+    color: "#065F46",
+  },
+  simTitleActive: {
+    color: colors.white,
+  },
+  simDesc: {
+    fontSize: 11,
+    color: "#047857",
+    marginTop: 2,
+  },
+  simDescActive: {
+    color: "rgba(255,255,255,0.9)",
   },
   cancelButton: {
     marginTop: 16,

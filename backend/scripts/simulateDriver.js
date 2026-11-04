@@ -10,8 +10,8 @@ if (process.env.NODE_ENV === "production" && !process.env.ALLOW_PROD_SIMULATION)
   process.exit(1);
 }
 
-const API_BASE = process.env.API_BASE_URL || "http://127.0.0.1:4000/api";
-const SOCKET_BASE = process.env.SOCKET_BASE_URL || "http://127.0.0.1:4000";
+const API_BASE = process.env.API_BASE_URL || "https://smart-waste-pickup-rewards.onrender.com/api";
+const SOCKET_BASE = process.env.SOCKET_BASE_URL || "https://smart-waste-pickup-rewards.onrender.com";
 const OSRM_BASE_URL = process.env.OSRM_BASE_URL || "https://router.project-osrm.org";
 
 // CLI Arguments parsing
@@ -28,8 +28,8 @@ const args = process.argv.slice(2).reduce((acc, arg) => {
 const IS_MULTI_MODE = Boolean(args.multi);
 const IS_LOOP_MODE = Boolean(args.loop);
 const TARGET_PICKUP_ID = args.pickup || args.pickupId || null;
-const DRIVER_EMAIL = args.email || process.env.DEMO_COLLECTOR_EMAIL || "demo_collector@example.com";
-const DRIVER_PASSWORD = args.password || process.env.DEMO_COLLECTOR_PASSWORD || "DemoCollector@123";
+const DRIVER_EMAIL = args.email || process.env.DEMO_COLLECTOR_EMAIL || "driver@wastewise.local";
+const DRIVER_PASSWORD = args.password || process.env.DEMO_COLLECTOR_PASSWORD || "Driver@123";
 const SPEED_MULTIPLIER = Math.max(0.1, parseFloat(args.speed || "1"));
 const BASE_SPEED_KMH = parseFloat(process.env.DEMO_SPEED_KMH || demoConfig.speedKmh || "30");
 const EFFECTIVE_SPEED_KMH = BASE_SPEED_KMH * SPEED_MULTIPLIER;

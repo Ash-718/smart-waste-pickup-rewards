@@ -50,6 +50,47 @@ export default function TrackPickupScreen({ route, navigation }) {
   // Pickup destination coordinates (null if not pinned)
   const pickupCoords = trackingData?.pickupCoordinates || null;
 
+  const [isSimulating, setIsSimulating] = useState(false);
+  const [simLoading, setSimLoading] = useState(false);
+
+  // Check initial simulation status
+  useEffect(() => {
+    if (!pickupId) return;
+    let mounted = true;
+    apiFetch(`/simulation/${pickupId}/status`)
+      .then((res) => {
+        if (mounted && res?.active) {
+          setIsSimulating(true);
+        }
+      })
+      .catch(() => {});
+    return () => {
+      mounted = false;
+    };
+  }, [pickupId]);
+
+  // Handle Virtual GPS toggle
+  const handleToggleSimulation = useCallback(async () => {
+    if (!pickupId || simLoading) return;
+    setSimLoading(true);
+    try {
+      if (isSimulating) {
+        await apiFetch(`/simulation/${pickupId}/stop`, { method: "POST" });
+        setIsSimulating(false);
+      } else {
+        await apiFetch(`/simulation/${pickupId}/start`, {
+          method: "POST",
+          body: { speedKmh: 30 },
+        });
+        setIsSimulating(true);
+      }
+    } catch (err) {
+      Alert.alert("Virtual GPS", err.message || "Failed to toggle simulation");
+    } finally {
+      setSimLoading(false);
+    }
+  }, [pickupId, isSimulating, simLoading]);
+
   // Fit map camera to show both vehicle and destination
   const handleRecenter = useCallback(() => {
     mapRef.current?.recenter();
@@ -171,6 +212,32 @@ export default function TrackPickupScreen({ route, navigation }) {
         </TouchableOpacity>
       </SafeAreaView>
 
+      {/* Floating Simulation Pill */}
+      {["assigned", "on_the_way"].includes(status) && (
+        <View style={styles.floatingSimContainer}>
+          <TouchableOpacity
+            style={[styles.floatingSimPill, isSimulating && styles.floatingSimPillActive]}
+            onPress={handleToggleSimulation}
+            disabled={simLoading}
+            activeOpacity={0.8}
+          >
+            {simLoading ? (
+              <ActivityIndicator size="small" color={isSimulating ? colors.white : colors.brand700} style={{ marginRight: 6 }} />
+            ) : (
+              <Ionicons
+                name={isSimulating ? "pause" : "play"}
+                size={14}
+                color={isSimulating ? colors.white : colors.brand700}
+                style={{ marginRight: 6 }}
+              />
+            )}
+            <Text style={[styles.floatingSimText, isSimulating && styles.floatingSimTextActive]}>
+              {isSimulating ? "Simulating Live Driver..." : "▶ Start Virtual GPS Simulation"}
+            </Text>
+          </TouchableOpacity>
+        </View>
+      )}
+
       {/* 3. Celebration Completion Card */}
       {status === "completed" && (
         <View style={styles.celebrationCard}>
@@ -202,6 +269,9 @@ export default function TrackPickupScreen({ route, navigation }) {
         telemetryAgeSec={telemetryAgeSec}
         demoMode={isDemoMode}
         onCancelPickup={status === "requested" || status === "assigned" ? handleCancelPickup : null}
+        isSimulating={isSimulating}
+        simLoading={simLoading}
+        onToggleSimulation={handleToggleSimulation}
       />
     </View>
   );
@@ -224,6 +294,39 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "space-between",
     zIndex: 10,
+  },
+  floatingSimContainer: {
+    position: "absolute",
+    top: 72,
+    alignSelf: "center",
+    zIndex: 10,
+  },
+  floatingSimPill: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: colors.white,
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    borderRadius: 24,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.18,
+    shadowRadius: 5,
+    elevation: 4,
+    borderWidth: 1.5,
+    borderColor: colors.brand500,
+  },
+  floatingSimPillActive: {
+    backgroundColor: colors.brand600,
+    borderColor: colors.brand700,
+  },
+  floatingSimText: {
+    fontSize: 13,
+    fontWeight: "700",
+    color: colors.brand700,
+  },
+  floatingSimTextActive: {
+    color: colors.white,
   },
   circleButton: {
     width: 44,
