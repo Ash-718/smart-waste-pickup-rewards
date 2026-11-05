@@ -26,7 +26,7 @@ const args = process.argv.slice(2).reduce((acc, arg) => {
 }, {});
 
 const IS_MULTI_MODE = Boolean(args.multi);
-const IS_LOOP_MODE = Boolean(args.loop);
+const IS_LOOP_MODE = args["no-loop"] ? false : true;
 const TARGET_PICKUP_ID = args.pickup || args.pickupId || null;
 const DRIVER_EMAIL = args.email || process.env.DEMO_COLLECTOR_EMAIL || "driver@wastewise.local";
 const DRIVER_PASSWORD = args.password || process.env.DEMO_COLLECTOR_PASSWORD || "Driver@123";
@@ -39,7 +39,7 @@ const HEARTBEAT_SECONDS = 5; // Emits every 5s while stopped (keeps vehicle fres
 
 const GPS_LOSS_AT = args["gps-loss-at"] ? parseFloat(args["gps-loss-at"]) : null;
 const GPS_LOSS_FOR = args["gps-loss-for"] ? parseFloat(args["gps-loss-for"]) : null;
-const STOP_AT_METERS = args["stop-at-meters"] !== undefined ? parseFloat(args["stop-at-meters"]) : (demoConfig.defaultStopAtMeters || 250);
+const STOP_AT_METERS = args["stop-at-meters"] !== undefined ? parseFloat(args["stop-at-meters"]) : 25;
 const AUTO_ARRIVE = Boolean(args["auto-arrive"]);
 
 /**
