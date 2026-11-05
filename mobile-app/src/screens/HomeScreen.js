@@ -35,9 +35,14 @@ export default function HomeScreen({ navigation }) {
     >
       {/* Top Header */}
       <View style={styles.header}>
-        <View>
-          <Text style={styles.greeting}>Hi, {user?.name?.split(" ")[0] || "Eco Citizen"}</Text>
-          <Text style={styles.subtitle}>Pruthvi Zero Waste Foundation</Text>
+        <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
+          <View style={styles.brandIconCircle}>
+            <Ionicons name="leaf" size={18} color={colors.white} />
+          </View>
+          <View>
+            <Text style={styles.greeting}>Hi, {user?.name?.split(" ")[0] || "Eco Citizen"}</Text>
+            <Text style={styles.subtitle}>Pruthvi Zero Waste Foundation</Text>
+          </View>
         </View>
         <Pressable style={styles.logoutBtn} onPress={logout}>
           <Text style={styles.logout}>Log out</Text>
@@ -47,7 +52,10 @@ export default function HomeScreen({ navigation }) {
       {/* Reminder Notification */}
       {reminder?.due && (
         <Card style={styles.reminderCard}>
-          <Text style={styles.reminderTitle}>⏰ Time for another pickup?</Text>
+          <View style={{ flexDirection: "row", alignItems: "center", marginBottom: 4 }}>
+            <Ionicons name="time" size={16} color="#d97706" style={{ marginRight: 6 }} />
+            <Text style={styles.reminderTitle}>Time for another pickup?</Text>
+          </View>
           <Text style={styles.reminderBody}>
             It's been {reminder.daysSinceLastPickup} days since your last completed pickup. Schedule one today!
           </Text>
@@ -58,9 +66,12 @@ export default function HomeScreen({ navigation }) {
       <Card style={styles.impactCard}>
         <View style={styles.impactHeader}>
           <Text style={styles.impactCardTitle}>Environmental Impact</Text>
-          <Text style={styles.impactCardBadge}>
-            🏅 {impact.currentBadge?.name || "Eco Citizen"}
-          </Text>
+          <View style={styles.badgePill}>
+            <Ionicons name="ribbon" size={13} color={colors.brand700} style={{ marginRight: 4 }} />
+            <Text style={styles.impactCardBadge}>
+              {impact.currentBadge?.name || "Eco Citizen"}
+            </Text>
+          </View>
         </View>
 
         <View style={styles.impactStatsRow}>
@@ -83,7 +94,11 @@ export default function HomeScreen({ navigation }) {
 
       {/* Quick Action Button */}
       <View style={styles.cta}>
-        <Button title="+ Book a Pickup" onPress={() => navigation.navigate("BookPickup")} />
+        <Button
+          title="Schedule a Pickup"
+          icon={<Ionicons name="add-circle" size={18} color={colors.white} />}
+          onPress={() => navigation.navigate("BookPickup")}
+        />
       </View>
 
       {/* "Your Impact This Month" Section */}
@@ -182,6 +197,24 @@ const styles = StyleSheet.create({
     color: colors.neutral900,
     fontSize: 22,
     fontWeight: "700",
+  },
+  brandIconCircle: {
+    width: 36,
+    height: 36,
+    borderRadius: 12,
+    backgroundColor: colors.brand700,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  badgePill: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: colors.white,
+    borderColor: colors.brand200,
+    borderRadius: 999,
+    borderWidth: 1,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
   },
   subtitle: {
     color: colors.neutral500,

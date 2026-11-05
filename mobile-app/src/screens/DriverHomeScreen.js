@@ -109,8 +109,8 @@ export default function DriverHomeScreen({ navigation }) {
             />
             <Text style={styles.statusLabel}>
               {item.status === "assigned" && "Assigned (Ready to Start)"}
-              {item.status === "on_the_way" && "Trip in Progress 🛰️"}
-              {item.status === "arrived" && "Arrived at Customer 📍"}
+              {item.status === "on_the_way" && "Trip in Progress"}
+              {item.status === "arrived" && "Arrived at Customer"}
             </Text>
           </View>
           <Ionicons name="chevron-forward" size={18} color={colors.neutral400} />
@@ -118,7 +118,8 @@ export default function DriverHomeScreen({ navigation }) {
 
         {item.ward?.area && (
           <View style={styles.wardTag}>
-            <Text style={styles.wardTagText}>📍 {item.ward.area} Sector</Text>
+            <Ionicons name="location-sharp" size={12} color="#065f46" style={{ marginRight: 4 }} />
+            <Text style={styles.wardTagText}>{item.ward.area} Sector</Text>
           </View>
         )}
 
@@ -789,8 +790,12 @@ const styles = StyleSheet.create({
     color: colors.white,
   },
   wardTag: {
+    flexDirection: "row",
+    alignItems: "center",
     alignSelf: "flex-start",
-    backgroundColor: colors.neutral100,
+    backgroundColor: "#ecfdf5",
+    borderWidth: 1,
+    borderColor: "#a7f3d0",
     paddingHorizontal: 8,
     paddingVertical: 3,
     borderRadius: 6,
@@ -798,7 +803,7 @@ const styles = StyleSheet.create({
   },
   wardTagText: {
     fontSize: 11,
-    fontWeight: "600",
-    color: colors.neutral700,
+    fontWeight: "700",
+    color: "#065f46",
   },
 });
