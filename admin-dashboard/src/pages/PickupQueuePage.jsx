@@ -10,6 +10,7 @@ import { TableSkeleton } from "../components/Skeleton";
 import AssignVehicleModal from "../components/AssignVehicleModal";
 import RejectPickupModal from "../components/RejectPickupModal";
 import AreaBatchDispatchModal from "../components/AreaBatchDispatchModal";
+import { resolvePickupWard, SANGLI_WARDS } from "../utils/areaZoneService";
 
 const STATUS_FILTERS = ["all", "requested", "assigned", "completed", "rejected", "cancelled"];
 
@@ -48,6 +49,7 @@ function stripCollectorSuffix(name) {
 
 export default function PickupQueuePage() {
   const [statusFilter, setStatusFilter] = useState("all");
+  const [sectorFilter, setSectorFilter] = useState("all");
   const [searchTerm, setSearchTerm] = useState("");
   const [assignPickupTarget, setAssignPickupTarget] = useState(null);
   const [rejectPickupTarget, setRejectPickupTarget] = useState(null);
@@ -63,8 +65,12 @@ export default function PickupQueuePage() {
 
   const pickups = data?.pickups || [];
 
-  // Filter pickups by search term behind the scenes (name, email, phone, address, vehicle, driver)
+  // Filter pickups by sector and search term
   const filteredPickups = pickups.filter((p) => {
+    const ward = resolvePickupWard(p);
+    if (sectorFilter !== "all" && ward.code !== sectorFilter) {
+      return false;
+    }
     if (!searchTerm.trim()) return true;
     const q = searchTerm.toLowerCase();
     return (
@@ -72,6 +78,8 @@ export default function PickupQueuePage() {
       p.user?.email?.toLowerCase().includes(q) ||
       p.user?.phone?.toLowerCase().includes(q) ||
       p.address?.toLowerCase().includes(q) ||
+      ward.area?.toLowerCase().includes(q) ||
+      ward.name?.toLowerCase().includes(q) ||
       p.assignments?.[0]?.vehicle?.registrationNo?.toLowerCase().includes(q) ||
       p.assignments?.[0]?.vehicle?.driver?.name?.toLowerCase().includes(q) ||
       p.id?.toLowerCase().includes(q)
@@ -114,6 +122,20 @@ export default function PickupQueuePage() {
             )}
           </div>
 
+          {/* Sector Filter */}
+          <select
+            value={sectorFilter}
+            onChange={(e) => setSectorFilter(e.target.value)}
+            className="rounded-xl border border-neutral-300 bg-white px-2.5 py-1.5 text-xs font-semibold text-neutral-800 shadow-2xs focus:border-emerald-600 focus:outline-hidden cursor-pointer"
+          >
+            <option value="all">📍 All Sectors</option>
+            {SANGLI_WARDS.map((w) => (
+              <option key={w.code} value={w.code}>
+                {w.area} Sector
+              </option>
+            ))}
+          </select>
+
           {/* Status Filters */}
           <div className="flex flex-wrap gap-1 rounded-xl border border-neutral-200 bg-white p-1 shadow-2xs">
             {STATUS_FILTERS.map((s) => (
@@ -140,6 +162,30 @@ export default function PickupQueuePage() {
             <span>📍</span> Batch Dispatch Area
           </button>
         </div>
+      </div>
+
+      {/* Area-Wise Municipal Cluster Banner */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-4 rounded-2xl bg-gradient-to-r from-emerald-50 via-teal-50 to-emerald-50 border border-emerald-200 shadow-xs">
+        <div className="flex items-center gap-3">
+          <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-600 text-white text-lg shadow-xs flex-shrink-0">
+            📍
+          </span>
+          <div>
+            <h3 className="text-sm font-bold text-emerald-950">
+              Area-Wise Multi-Stop Batch Collection
+            </h3>
+            <p className="text-xs text-emerald-700">
+              Cluster nearby houses in the same neighborhood (Vishrambag, Miraj, Kupwad) and dispatch 1 vehicle for sequential collection.
+            </p>
+          </div>
+        </div>
+        <button
+          type="button"
+          onClick={() => setShowAreaBatchModal(true)}
+          className="inline-flex items-center justify-center gap-2 rounded-xl bg-emerald-600 px-4 py-2 text-xs font-bold text-white shadow-xs hover:bg-emerald-700 transition-all cursor-pointer whitespace-nowrap flex-shrink-0"
+        >
+          <span>⚡</span> Batch Dispatch Area Run
+        </button>
       </div>
 
       {isLoading && <TableSkeleton />}
@@ -197,8 +243,8 @@ export default function PickupQueuePage() {
 
                     {/* Sector / Ward badge */}
                     <td className="px-4 py-3.5 whitespace-nowrap">
-                      <span className="inline-flex items-center gap-1 rounded-md bg-neutral-100 px-2 py-0.5 text-[11px] font-semibold text-neutral-700 border border-neutral-200/60">
-                        📍 {p.ward?.area || "General Ward"}
+                      <span className="inline-flex items-center gap-1 rounded-md bg-emerald-50 px-2 py-0.5 text-[11px] font-bold text-emerald-800 border border-emerald-200">
+                        📍 {resolvePickupWard(p).area}
                       </span>
                     </td>
 
