@@ -475,32 +475,22 @@ async function main() {
     const multiDrivers = [
       {
         tag: "TRUCK-01",
-        driverEmail: "demo_collector@example.com",
-        driverPassword: "DemoCollector@123",
+        driverEmail: "driver@wastewise.local",
+        driverPassword: "Driver@123",
       },
       {
         tag: "TRUCK-02",
-        driverEmail: "demo_collector_suresh@example.com",
-        driverPassword: "DemoCollector@123",
+        driverEmail: "suresh.patil@wastewise.local",
+        driverPassword: "Driver@123",
       },
       {
         tag: "TRUCK-03",
-        driverEmail: "demo_collector_vikas@example.com",
-        driverPassword: "DemoCollector@123",
+        driverEmail: "vikas.jadhav@wastewise.local",
+        driverPassword: "Driver@123",
       },
       {
         tag: "TRUCK-04",
-        driverEmail: "demo_collector_sachin@example.com",
-        driverPassword: "DemoCollector@123",
-      },
-      {
-        tag: "TRUCK-05",
-        driverEmail: "demo_collector_mahesh@example.com",
-        driverPassword: "DemoCollector@123",
-      },
-      {
-        tag: "TRUCK-WW",
-        driverEmail: "driver@wastewise.local",
+        driverEmail: "sachin.kamble@wastewise.local",
         driverPassword: "Driver@123",
       },
     ];
