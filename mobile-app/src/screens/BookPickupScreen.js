@@ -6,6 +6,7 @@ import {
   Image,
   Platform,
   Pressable,
+  ScrollView,
   StyleSheet,
   Text,
   View,
@@ -23,6 +24,51 @@ import { useMeta } from "../hooks/useMeta";
 import { createPickup } from "../api/pickups";
 import { uploadPickupPhoto } from "../api/uploads";
 import { colors } from "../theme/colors";
+
+const COMMON_PLACES = [
+  {
+    name: "Gandhi Chowk",
+    subtext: "High School Road",
+    address: "Gandhi Chowk, High School Road, Miraj 416410",
+    coords: { latitude: 16.8460, longitude: 74.6045 },
+  },
+  {
+    name: "Station Road",
+    subtext: "Miraj Junction",
+    address: "Station Road, Near Miraj Junction, Miraj, Maharashtra 416410",
+    coords: { latitude: 16.8413, longitude: 74.6016 },
+  },
+  {
+    name: "Market Yard",
+    subtext: "APMC Market",
+    address: "Market Yard Road, Near APMC Market, Miraj 416410",
+    coords: { latitude: 16.8520, longitude: 74.6120 },
+  },
+  {
+    name: "Shivaji Nagar",
+    subtext: "Opp. City Garden",
+    address: "Shivaji Nagar, Opp. City Garden, Miraj 416410",
+    coords: { latitude: 16.8475, longitude: 74.6155 },
+  },
+  {
+    name: "Wanless Hospital",
+    subtext: "Mission Compound",
+    address: "Wanless Hospital Road, Mission Compound, Miraj 416410",
+    coords: { latitude: 16.8390, longitude: 74.6190 },
+  },
+  {
+    name: "Vishrambag",
+    subtext: "Sangli-Miraj Link",
+    address: "Vishrambag Main Road, Sangli-Miraj Link, Sangli 416415",
+    coords: { latitude: 16.8510, longitude: 74.5880 },
+  },
+  {
+    name: "Brahman Puri",
+    subtext: "Near Venkatesh Mandir",
+    address: "Brahman Puri, Near Venkatesh Mandir, Miraj 416410",
+    coords: { latitude: 16.8435, longitude: 74.6080 },
+  },
+];
 
 export default function BookPickupScreen({ navigation }) {
   const queryClient = useQueryClient();
@@ -57,6 +103,12 @@ export default function BookPickupScreen({ navigation }) {
     setSelectedAsset(asset);
     setPhotoPreviewUri(asset.uri);
     setPhotoUrl(null);
+    setError(null);
+  }
+
+  function selectCommonPlace(place) {
+    setAddress(place.address);
+    setCoordinates(place.coords);
     setError(null);
   }
 
@@ -322,12 +374,47 @@ export default function BookPickupScreen({ navigation }) {
         onChange={setSlotPeriod}
       />
 
+      {/* Common Places Quick-Select */}
+      <View style={styles.commonPlacesSection}>
+        <View style={styles.commonPlacesHeaderRow}>
+          <Ionicons name="compass-outline" size={14} color={colors.neutral600} style={{ marginRight: 4 }} />
+          <Text style={styles.commonPlacesHeaderTitle}>Common locations in operating zone:</Text>
+        </View>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.commonPlacesScroll}>
+          {COMMON_PLACES.map((p) => {
+            const isSelected = address === p.address;
+            return (
+              <Pressable
+                key={p.name}
+                style={[styles.commonPlaceChip, isSelected && styles.commonPlaceChipSelected]}
+                onPress={() => selectCommonPlace(p)}
+              >
+                <Ionicons
+                  name={isSelected ? "location" : "location-outline"}
+                  size={14}
+                  color={isSelected ? colors.white : colors.brand700}
+                  style={{ marginRight: 6 }}
+                />
+                <View>
+                  <Text style={[styles.commonPlaceName, isSelected && styles.commonPlaceNameSelected]}>
+                    {p.name}
+                  </Text>
+                  <Text style={[styles.commonPlaceSubtext, isSelected && styles.commonPlaceSubtextSelected]}>
+                    {p.subtext}
+                  </Text>
+                </View>
+              </Pressable>
+            );
+          })}
+        </ScrollView>
+      </View>
+
       <TextField
         label="Pickup address"
         value={address}
         onChangeText={setAddress}
         multiline
-        placeholder="House / street / area"
+        placeholder="House / street / area (or tap a common place above)"
       />
 
       {/* GPS Location Pinning Button & Indicator */}
@@ -463,6 +550,59 @@ export default function BookPickupScreen({ navigation }) {
 }
 
 const styles = StyleSheet.create({
+  commonPlacesSection: {
+    marginBottom: 12,
+  },
+  commonPlacesHeaderRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 6,
+  },
+  commonPlacesHeaderTitle: {
+    fontSize: 12,
+    fontWeight: "600",
+    color: colors.neutral600,
+  },
+  commonPlacesScroll: {
+    flexDirection: "row",
+    gap: 8,
+    paddingBottom: 4,
+  },
+  commonPlaceChip: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: colors.white,
+    borderColor: colors.neutral200,
+    borderWidth: 1,
+    borderRadius: 10,
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.03,
+    shadowRadius: 2,
+    elevation: 1,
+  },
+  commonPlaceChipSelected: {
+    backgroundColor: colors.brand700,
+    borderColor: colors.brand700,
+  },
+  commonPlaceName: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: colors.neutral800,
+  },
+  commonPlaceNameSelected: {
+    color: colors.white,
+  },
+  commonPlaceSubtext: {
+    fontSize: 10,
+    color: colors.neutral500,
+    marginTop: 1,
+  },
+  commonPlaceSubtextSelected: {
+    color: "rgba(255, 255, 255, 0.8)",
+  },
   field: {
     marginBottom: 16,
   },

@@ -27,7 +27,7 @@ function TabIcon({ routeName, focused }) {
     <View style={[styles.iconWrap, focused && styles.iconWrapActive]}>
       <Ionicons
         name={iconName}
-        size={20}
+        size={24}
         color={focused ? colors.brand700 : colors.neutral400}
       />
     </View>
@@ -39,6 +39,7 @@ export default function MainTabs() {
     <Tab.Navigator
       screenOptions={({ route }) => ({
         headerShown: false,
+        tabBarShowLabel: false,
         tabBarActiveTintColor: colors.brand700,
         tabBarInactiveTintColor: colors.neutral400,
         tabBarIcon: ({ focused }) => <TabIcon routeName={route.name} focused={focused} />,
@@ -46,32 +47,25 @@ export default function MainTabs() {
           backgroundColor: colors.white,
           borderTopColor: colors.neutral200,
           borderTopWidth: 1,
-          height: Platform.OS === "ios" ? 86 : 70,
-          paddingTop: 6,
-          paddingBottom: Platform.OS === "ios" ? 24 : 8,
+          height: Platform.OS === "ios" ? 76 : 62,
+          paddingTop: Platform.OS === "ios" ? 8 : 0,
+          paddingBottom: Platform.OS === "ios" ? 18 : 0,
           elevation: 10,
           shadowColor: "#000",
           shadowOffset: { width: 0, height: -2 },
-          shadowOpacity: 0.05,
+          shadowOpacity: 0.06,
           shadowRadius: 6,
         },
         tabBarItemStyle: {
-          paddingVertical: 2,
           justifyContent: "center",
           alignItems: "center",
-        },
-        tabBarLabelStyle: {
-          fontSize: 10.5,
-          fontWeight: "600",
-          letterSpacing: 0.1,
-          marginTop: 2,
-          marginBottom: 2,
+          height: Platform.OS === "ios" ? 54 : 60,
         },
       })}
     >
       <Tab.Screen name="Home" component={HomeScreen} />
-      <Tab.Screen name="Pickups" component={MyPickupsScreen} options={{ title: "My Pickups" }} />
-      <Tab.Screen name="Impact" component={ImpactScreen} options={{ title: "My Impact" }} />
+      <Tab.Screen name="Pickups" component={MyPickupsScreen} />
+      <Tab.Screen name="Impact" component={ImpactScreen} />
       <Tab.Screen name="Rewards" component={RewardsScreen} />
       <Tab.Screen name="Badges" component={BadgesScreen} />
     </Tab.Navigator>
@@ -82,9 +76,9 @@ const styles = StyleSheet.create({
   iconWrap: {
     alignItems: "center",
     justifyContent: "center",
-    width: 34,
-    height: 26,
-    borderRadius: 13,
+    width: 48,
+    height: 34,
+    borderRadius: 17,
   },
   iconWrapActive: {
     backgroundColor: colors.brand50,
