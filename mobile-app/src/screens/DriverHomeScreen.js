@@ -116,6 +116,12 @@ export default function DriverHomeScreen({ navigation }) {
           <Ionicons name="chevron-forward" size={18} color={colors.neutral400} />
         </View>
 
+        {item.ward?.area && (
+          <View style={styles.wardTag}>
+            <Text style={styles.wardTagText}>📍 {item.ward.area} Sector</Text>
+          </View>
+        )}
+
         <Text style={styles.addressText} numberOfLines={2}>
           {item.address}
         </Text>
@@ -350,6 +356,23 @@ export default function DriverHomeScreen({ navigation }) {
         keyExtractor={(item) => item.id}
         renderItem={activeTab === "active" ? renderPickupCard : renderHistoryCard}
         contentContainerStyle={styles.listContent}
+        ListHeaderComponent={
+          activeTab === "active" && pickups.length > 1 ? (
+            <View style={styles.areaRunBanner}>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.areaRunTitle}>
+                  📍 {pickups[0]?.ward?.area || "Neighborhood"} Area Run
+                </Text>
+                <Text style={styles.areaRunSubtitle}>
+                  {pickups.length} clustered stops assigned together for optimal collection
+                </Text>
+              </View>
+              <View style={styles.areaRunBadge}>
+                <Text style={styles.areaRunBadgeText}>{pickups.length} STOPS</Text>
+              </View>
+            </View>
+          ) : null
+        }
         refreshControl={
           <RefreshControl
             refreshing={isFetching}
@@ -731,5 +754,51 @@ const styles = StyleSheet.create({
     textAlign: "center",
     lineHeight: 18,
     maxWidth: 280,
+  },
+  areaRunBanner: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: colors.brand50 || "#ecfdf5",
+    borderWidth: 1,
+    borderColor: colors.brand200 || "#a7f3d0",
+    borderRadius: 14,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    marginBottom: 12,
+  },
+  areaRunTitle: {
+    fontSize: 13,
+    fontWeight: "700",
+    color: colors.brand900,
+  },
+  areaRunSubtitle: {
+    fontSize: 11,
+    color: colors.brand700,
+    marginTop: 2,
+  },
+  areaRunBadge: {
+    backgroundColor: colors.brand600,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 8,
+    marginLeft: 10,
+  },
+  areaRunBadgeText: {
+    fontSize: 10,
+    fontWeight: "800",
+    color: colors.white,
+  },
+  wardTag: {
+    alignSelf: "flex-start",
+    backgroundColor: colors.neutral100,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 6,
+    marginBottom: 8,
+  },
+  wardTagText: {
+    fontSize: 11,
+    fontWeight: "600",
+    color: colors.neutral700,
   },
 });

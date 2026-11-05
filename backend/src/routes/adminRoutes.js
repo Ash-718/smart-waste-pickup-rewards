@@ -31,7 +31,14 @@ router.get("/analytics/waste-category", getWasteCategories);
 router.get("/users", listUsers);
 router.get("/users/:id", getUserProfile);
 
-const { assign, updateCoordinates, updateStatus, reject } = require("../controllers/pickupController");
+const {
+  assign,
+  updateCoordinates,
+  updateStatus,
+  reject,
+  getAreaClusters,
+  batchAssignArea,
+} = require("../controllers/pickupController");
 const {
   getLiveFleet,
   listVehicles,
@@ -56,6 +63,10 @@ router.get("/collector-applications", listApplications);
 router.get("/collector-applications/:id", getApplication);
 router.post("/collector-applications/:id/approve", approveApplication);
 router.post("/collector-applications/:id/reject", rejectApplication);
+
+// Area-Wise Batch Dispatch & Clustering
+router.get("/pickups/area-clusters", getAreaClusters);
+router.post("/pickups/batch-assign-area", batchAssignArea);
 
 // Pickup Assignment & Status Updates
 router.post("/pickups/:id/assign", assign);

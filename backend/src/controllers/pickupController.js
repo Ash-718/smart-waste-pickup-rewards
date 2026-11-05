@@ -12,8 +12,9 @@ const {
   estimatedWasteKg,
 } = require("../config/constants");
 const { completePickupAndAwardPoints, getAvailablePoints } = require("../services/pointsService");
-const { assignVehicleToPickup } = require("../services/assignmentService");
+const { assignVehicleToPickup, batchAssignVehicleToPickups } = require("../services/assignmentService");
 const { transitionPickupStatus } = require("../services/pickupStatusService");
+const { resolvePickupWard, groupPickupsByWard } = require("../utils/areaZoneService");
 
 const create = asyncHandler(async (req, res) => {
   const data = createPickupSchema.parse(req.body);
@@ -75,7 +76,12 @@ const list = asyncHandler(async (req, res) => {
     },
   });
 
-  res.json({ pickups });
+  const pickupsWithWard = pickups.map((p) => ({
+    ...p,
+    ward: resolvePickupWard(p),
+  }));
+
+  res.json({ pickups: pickupsWithWard });
 });
 
 const getById = asyncHandler(async (req, res) => {
@@ -103,7 +109,105 @@ const getById = asyncHandler(async (req, res) => {
     throw new HttpError(403, "Forbidden");
   }
 
-  res.json({ pickup });
+  res.json({
+    pickup: {
+      ...pickup,
+      ward: resolvePickupWard(pickup),
+    },
+  });
+});
+
+/**
+ * GET /api/admin/pickups/area-clusters
+ * Groups pending pickups by neighborhood ward/area to support batch municipal collection.
+ */
+const getAreaClusters = asyncHandler(async (req, res) => {
+  const { status = "requested", slotPeriod, date } = req.query;
+  const where = {};
+
+  if (status && status !== "all") {
+    where.status = status;
+  }
+  if (slotPeriod) {
+    where.slotPeriod = slotPeriod;
+  }
+  if (date) {
+    where.requestedDate = new Date(date);
+  }
+
+  const pickups = await prisma.pickup.findMany({
+    where,
+    orderBy: { createdAt: "desc" },
+    include: {
+      user: { select: { id: true, name: true, phone: true } },
+      assignments: {
+        where: { isActive: true },
+        include: {
+          vehicle: {
+            include: {
+              driver: { select: { id: true, name: true, phone: true } },
+            },
+          },
+        },
+      },
+    },
+  });
+
+  const clusters = groupPickupsByWard(pickups);
+
+  // Available active vehicles with assigned collectors
+  const activeVehicles = await prisma.vehicle.findMany({
+    where: { isActive: true, driverId: { not: null } },
+    include: {
+      driver: { select: { id: true, name: true, phone: true } },
+      assignments: {
+        where: { isActive: true },
+        include: { pickup: { select: { id: true, status: true } } },
+      },
+    },
+  });
+
+  const availableVehicles = activeVehicles.map((v) => ({
+    id: v.id,
+    registrationNo: v.registrationNo,
+    type: v.type,
+    capacity: v.capacity,
+    driver: v.driver,
+    activeAssignmentsCount: v.assignments.length,
+    isEnRoute: v.assignments.some((a) => ["on_the_way", "arrived"].includes(a.pickup.status)),
+  }));
+
+  res.json({
+    totalPickups: pickups.length,
+    totalClusters: clusters.length,
+    clusters,
+    availableVehicles,
+  });
+});
+
+/**
+ * POST /api/admin/pickups/batch-assign-area
+ * Atomically dispatches a single vehicle to an entire area cluster of pickups.
+ */
+const batchAssignArea = asyncHandler(async (req, res) => {
+  const { vehicleId, pickupIds, slotPeriod, requestedDate } = req.body;
+
+  if (!vehicleId) {
+    throw new HttpError(400, "vehicleId is required");
+  }
+  if (!Array.isArray(pickupIds) || pickupIds.length === 0) {
+    throw new HttpError(400, "pickupIds must be a non-empty array of pickup IDs");
+  }
+
+  const result = await batchAssignVehicleToPickups({
+    pickupIds,
+    vehicleId,
+    adminUserId: req.user.id,
+    slotPeriod,
+    requestedDate,
+  });
+
+  res.json(result);
 });
 
 const assign = asyncHandler(async (req, res) => {
@@ -334,5 +438,16 @@ const updateCoordinates = asyncHandler(async (req, res) => {
   res.json({ pickup: updated, message: "Pickup destination coordinates updated successfully" });
 });
 
-module.exports = { create, list, getById, assign, updateStatus, reject, myImpact, updateCoordinates };
+module.exports = {
+  create,
+  list,
+  getById,
+  assign,
+  updateStatus,
+  reject,
+  myImpact,
+  updateCoordinates,
+  getAreaClusters,
+  batchAssignArea,
+};
 

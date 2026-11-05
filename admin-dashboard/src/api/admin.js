@@ -55,6 +55,15 @@ export function createBadge(data) {
   return apiFetch("/badges", { method: "POST", body: data });
 }
 
+export function getAreaClusters(params = {}) {
+  const q = new URLSearchParams(params).toString();
+  return apiFetch(`/admin/pickups/area-clusters${q ? `?${q}` : ""}`);
+}
+
+export function batchAssignArea(data) {
+  return apiFetch("/admin/pickups/batch-assign-area", { method: "POST", body: data });
+}
+
 // Fleet & Vehicle Management
 export function getLiveFleet() {
   return apiFetch("/admin/vehicles/live");

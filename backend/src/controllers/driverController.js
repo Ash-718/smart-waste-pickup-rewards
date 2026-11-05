@@ -1,6 +1,7 @@
 const prisma = require("../db/client");
 const { asyncHandler, HttpError } = require("../middleware/errorHandler");
 const { transitionPickupStatus } = require("../services/pickupStatusService");
+const { resolvePickupWard } = require("../utils/areaZoneService");
 const { z } = require("zod");
 
 const updateDriverStatusSchema = z.object({
@@ -70,6 +71,7 @@ const getDriverPickups = asyncHandler(async (req, res) => {
 
   const pickups = activeAssignments.map((a) => ({
     ...a.pickup,
+    ward: resolvePickupWard(a.pickup),
     assignment: {
       id: a.id,
       assignedAt: a.assignedAt,
@@ -80,6 +82,7 @@ const getDriverPickups = asyncHandler(async (req, res) => {
 
   const history = pastAssignments.map((a) => ({
     ...a.pickup,
+    ward: resolvePickupWard(a.pickup),
     assignment: {
       id: a.id,
       assignedAt: a.assignedAt,

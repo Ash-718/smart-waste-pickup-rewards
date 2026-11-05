@@ -9,6 +9,7 @@ import ErrorState from "../components/ErrorState";
 import { TableSkeleton } from "../components/Skeleton";
 import AssignVehicleModal from "../components/AssignVehicleModal";
 import RejectPickupModal from "../components/RejectPickupModal";
+import AreaBatchDispatchModal from "../components/AreaBatchDispatchModal";
 
 const STATUS_FILTERS = ["all", "requested", "assigned", "completed", "rejected", "cancelled"];
 
@@ -50,6 +51,7 @@ export default function PickupQueuePage() {
   const [searchTerm, setSearchTerm] = useState("");
   const [assignPickupTarget, setAssignPickupTarget] = useState(null);
   const [rejectPickupTarget, setRejectPickupTarget] = useState(null);
+  const [showAreaBatchModal, setShowAreaBatchModal] = useState(false);
 
   const navigate = useNavigate();
   const { wasteTypeLabel, slotPeriodLabel } = useMeta();
@@ -128,6 +130,15 @@ export default function PickupQueuePage() {
               </button>
             ))}
           </div>
+
+          {/* Area-Wise Batch Dispatch Button */}
+          <button
+            type="button"
+            onClick={() => setShowAreaBatchModal(true)}
+            className="flex items-center gap-1.5 rounded-xl bg-emerald-600 px-3.5 py-1.5 text-xs font-bold text-white shadow-2xs hover:bg-emerald-700 transition-colors cursor-pointer"
+          >
+            <span>📍</span> Batch Dispatch Area
+          </button>
         </div>
       </div>
 
@@ -155,6 +166,7 @@ export default function PickupQueuePage() {
               <thead className="bg-neutral-50 font-semibold text-neutral-600">
                 <tr>
                   <th className="px-4 py-3.5 whitespace-nowrap">Citizen</th>
+                  <th className="px-4 py-3.5 whitespace-nowrap">Sector / Ward</th>
                   <th className="px-4 py-3.5 whitespace-nowrap">Waste & Weight</th>
                   <th className="px-4 py-3.5 whitespace-nowrap">Slot & Date</th>
                   <th className="px-4 py-3.5 whitespace-nowrap">Status</th>
@@ -181,6 +193,13 @@ export default function PickupQueuePage() {
                       >
                         {p.user?.name || "Unknown Citizen"}
                       </div>
+                    </td>
+
+                    {/* Sector / Ward badge */}
+                    <td className="px-4 py-3.5 whitespace-nowrap">
+                      <span className="inline-flex items-center gap-1 rounded-md bg-neutral-100 px-2 py-0.5 text-[11px] font-semibold text-neutral-700 border border-neutral-200/60">
+                        📍 {p.ward?.area || "General Ward"}
+                      </span>
                     </td>
 
                     {/* Waste & Weight: One line */}
@@ -352,6 +371,12 @@ export default function PickupQueuePage() {
           pickup={rejectPickupTarget}
           onClose={() => setRejectPickupTarget(null)}
           onRejected={() => refetch()}
+        />
+      )}
+
+      {showAreaBatchModal && (
+        <AreaBatchDispatchModal
+          onClose={() => setShowAreaBatchModal(false)}
         />
       )}
     </div>
