@@ -50,6 +50,8 @@ function stripCollectorSuffix(name) {
 export default function PickupQueuePage() {
   const [statusFilter, setStatusFilter] = useState("all");
   const [sectorFilter, setSectorFilter] = useState("all");
+  const [timeSlotFilter, setTimeSlotFilter] = useState("all");
+  const [selectedTablePickupIds, setSelectedTablePickupIds] = useState(new Set());
   const [searchTerm, setSearchTerm] = useState("");
   const [assignPickupTarget, setAssignPickupTarget] = useState(null);
   const [rejectPickupTarget, setRejectPickupTarget] = useState(null);
@@ -65,11 +67,17 @@ export default function PickupQueuePage() {
 
   const pickups = data?.pickups || [];
 
-  // Filter pickups by sector and search term
+  // Filter pickups by sector, time slot, and search term
   const filteredPickups = pickups.filter((p) => {
     const ward = resolvePickupWard(p);
     if (sectorFilter !== "all" && ward.code !== sectorFilter) {
       return false;
+    }
+    if (timeSlotFilter !== "all") {
+      const pSlot = (p.slotPeriod || "").toUpperCase();
+      if (pSlot !== timeSlotFilter.toUpperCase()) {
+        return false;
+      }
     }
     if (!searchTerm.trim()) return true;
     const q = searchTerm.toLowerCase();
@@ -134,6 +142,18 @@ export default function PickupQueuePage() {
                 {w.area} Sector
               </option>
             ))}
+          </select>
+
+          {/* Time Slot Filter */}
+          <select
+            value={timeSlotFilter}
+            onChange={(e) => setTimeSlotFilter(e.target.value)}
+            className="rounded-xl border border-neutral-300 bg-white px-2.5 py-1.5 text-xs font-semibold text-neutral-800 shadow-2xs focus:border-emerald-600 focus:outline-hidden cursor-pointer"
+          >
+            <option value="all">🕒 All Time Slots</option>
+            <option value="MORNING">🌅 Morning (7-11 AM)</option>
+            <option value="AFTERNOON">☀️ Afternoon (12-4 PM)</option>
+            <option value="EVENING">🌆 Evening (4-7 PM)</option>
           </select>
 
           {/* Status Filters */}
@@ -211,6 +231,24 @@ export default function PickupQueuePage() {
             <table className="w-full divide-y divide-neutral-100 text-xs text-left">
               <thead className="bg-neutral-50 font-semibold text-neutral-600">
                 <tr>
+                  <th className="px-3 py-3.5 w-10 text-center">
+                    <input
+                      type="checkbox"
+                      checked={
+                        filteredPickups.length > 0 &&
+                        filteredPickups.every((p) => selectedTablePickupIds.has(p.id))
+                      }
+                      onChange={(e) => {
+                        if (e.target.checked) {
+                          setSelectedTablePickupIds(new Set(filteredPickups.map((p) => p.id)));
+                        } else {
+                          setSelectedTablePickupIds(new Set());
+                        }
+                      }}
+                      className="h-4 w-4 rounded text-emerald-600 focus:ring-emerald-500 cursor-pointer"
+                      title="Select All Visible"
+                    />
+                  </th>
                   <th className="px-4 py-3.5 whitespace-nowrap">Citizen</th>
                   <th className="px-4 py-3.5 whitespace-nowrap">Sector / Ward</th>
                   <th className="px-4 py-3.5 whitespace-nowrap">Waste & Weight</th>
@@ -225,12 +263,33 @@ export default function PickupQueuePage() {
               <tbody className="divide-y divide-neutral-100 bg-white">
                 {filteredPickups.map((p) => {
                   const status = (p.status || "").toLowerCase().trim();
+                  const isRowSelected = selectedTablePickupIds.has(p.id);
                   return (
                     <tr
                       key={p.id}
                       onClick={() => navigate(`/queue/${p.id}`)}
-                      className="hover:bg-neutral-50/80 transition-colors cursor-pointer group"
+                      className={`hover:bg-neutral-50/80 transition-colors cursor-pointer group ${
+                        isRowSelected ? "bg-emerald-50/30" : ""
+                      }`}
                     >
+                    {/* Row checkbox */}
+                    <td
+                      className="px-3 py-3.5 w-10 text-center"
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={isRowSelected}
+                        onChange={() => {
+                          const next = new Set(selectedTablePickupIds);
+                          if (next.has(p.id)) next.delete(p.id);
+                          else next.add(p.id);
+                          setSelectedTablePickupIds(next);
+                        }}
+                        className="h-4 w-4 rounded text-emerald-600 focus:ring-emerald-500 cursor-pointer"
+                      />
+                    </td>
+
                     {/* Citizen: Name only */}
                     <td className="px-4 py-3.5 whitespace-nowrap">
                       <div
@@ -403,6 +462,37 @@ export default function PickupQueuePage() {
         </div>
       )}
 
+      {/* Floating Multi-Select Batch Action Bar */}
+      {selectedTablePickupIds.size > 0 && (
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-40 flex items-center gap-3.5 rounded-2xl bg-neutral-900/95 text-white px-5 py-3 shadow-2xl backdrop-blur-md border border-neutral-700/60 animate-in fade-in slide-in-from-bottom-3 duration-200">
+          <div className="flex items-center gap-2">
+            <span className="flex h-6 w-6 items-center justify-center rounded-lg bg-emerald-500 font-bold text-xs text-neutral-950">
+              {selectedTablePickupIds.size}
+            </span>
+            <span className="text-xs font-semibold">
+              {selectedTablePickupIds.size === 1
+                ? "1 Pickup Selected"
+                : `${selectedTablePickupIds.size} Pickups Selected`}
+            </span>
+          </div>
+          <div className="h-4 w-px bg-neutral-700" />
+          <button
+            type="button"
+            onClick={() => setShowAreaBatchModal(true)}
+            className="rounded-xl bg-emerald-600 px-3.5 py-1.5 text-xs font-bold text-white hover:bg-emerald-500 transition-colors cursor-pointer flex items-center gap-1.5 shadow-xs"
+          >
+            <span>⚡</span> Batch Dispatch Selected
+          </button>
+          <button
+            type="button"
+            onClick={() => setSelectedTablePickupIds(new Set())}
+            className="text-xs text-neutral-400 hover:text-white transition-colors cursor-pointer px-1"
+          >
+            Clear
+          </button>
+        </div>
+      )}
+
       {/* Modals */}
       {assignPickupTarget && (
         <AssignVehicleModal
@@ -423,7 +513,11 @@ export default function PickupQueuePage() {
       {showAreaBatchModal && (
         <AreaBatchDispatchModal
           pickups={pickups}
-          onClose={() => setShowAreaBatchModal(false)}
+          initialSelectedIds={selectedTablePickupIds.size > 0 ? selectedTablePickupIds : null}
+          onClose={() => {
+            setShowAreaBatchModal(false);
+            setSelectedTablePickupIds(new Set());
+          }}
         />
       )}
     </div>

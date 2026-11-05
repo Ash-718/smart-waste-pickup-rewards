@@ -167,14 +167,34 @@ function resolvePickupWard(pickup) {
 }
 
 /**
- * Groups a collection of pickups into area/ward clusters.
+ * Groups a collection of pickups into area/ward clusters, supporting time-slot filtering and multi-slot clustering.
  */
-function groupPickupsByWard(pickups) {
+function groupPickupsByWard(pickups, options = {}) {
+  const { slotFilter = "all", dateFilter = "all" } = options;
   const clusterMap = new Map();
 
   for (const p of pickups) {
+    if (!p) continue;
+    const status = (p.status || "").toLowerCase().trim();
+    if (status && status !== "requested") continue;
+
+    const pSlot = (p.slotPeriod || "").toUpperCase();
+    if (slotFilter && slotFilter !== "all" && pSlot !== slotFilter.toUpperCase()) {
+      continue;
+    }
+
+    if (dateFilter && dateFilter !== "all" && p.requestedDate) {
+      const pDateStr = new Date(p.requestedDate).toISOString().split("T")[0];
+      if (pDateStr !== dateFilter) {
+        continue;
+      }
+    }
+
     const ward = resolvePickupWard(p);
-    const key = `${ward.code}__${p.slotPeriod || "any"}__${p.requestedDate ? new Date(p.requestedDate).toISOString().split("T")[0] : "any"}`;
+    // Group all nearby neighborhood houses together under the ward sector
+    const key = slotFilter === "all"
+      ? ward.code
+      : `${ward.code}__${pSlot || "any"}`;
 
     if (!clusterMap.has(key)) {
       clusterMap.set(key, {
@@ -186,12 +206,23 @@ function groupPickupsByWard(pickups) {
         requestedDate: p.requestedDate,
         pickupCount: 0,
         totalEstimatedWeight: 0,
+        slotBreakdown: {
+          MORNING: 0,
+          AFTERNOON: 0,
+          EVENING: 0,
+          OTHER: 0,
+        },
         pickups: [],
       });
     }
 
     const cluster = clusterMap.get(key);
     cluster.pickupCount += 1;
+    if (pSlot === "MORNING") cluster.slotBreakdown.MORNING += 1;
+    else if (pSlot === "AFTERNOON") cluster.slotBreakdown.AFTERNOON += 1;
+    else if (pSlot === "EVENING") cluster.slotBreakdown.EVENING += 1;
+    else cluster.slotBreakdown.OTHER += 1;
+
     cluster.totalEstimatedWeight += p.wasteQuantity || (p.quantityBand === "LARGE" ? 15 : p.quantityBand === "MEDIUM" ? 8 : 3);
     cluster.pickups.push({
       ...p,

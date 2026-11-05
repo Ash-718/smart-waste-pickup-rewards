@@ -141,8 +141,10 @@ export function resolvePickupWard(pickup) {
 
 /**
  * Groups a collection of pickups into area/ward clusters instantly on the client.
+ * Supports filtering by slotPeriod and date, and groups all neighborhood houses together.
  */
-export function groupPickupsByWard(pickups = []) {
+export function groupPickupsByWard(pickups = [], options = {}) {
+  const { slotFilter = "all", dateFilter = "all" } = options;
   const clusterMap = new Map();
 
   for (const p of pickups) {
@@ -151,12 +153,23 @@ export function groupPickupsByWard(pickups = []) {
     const status = (p.status || "").toLowerCase().trim();
     if (status && status !== "requested") continue;
 
+    const pSlot = (p.slotPeriod || "").toUpperCase();
+    if (slotFilter && slotFilter !== "all" && pSlot !== slotFilter.toUpperCase()) {
+      continue;
+    }
+
+    if (dateFilter && dateFilter !== "all" && p.requestedDate) {
+      const pDateStr = new Date(p.requestedDate).toISOString().split("T")[0];
+      if (pDateStr !== dateFilter) {
+        continue;
+      }
+    }
+
     const ward = resolvePickupWard(p);
-    const dateStr = p.requestedDate
-      ? new Date(p.requestedDate).toISOString().split("T")[0]
-      : "any";
-    const slot = p.slotPeriod || "any";
-    const key = `${ward.code}__${slot}__${dateStr}`;
+    // Group all nearby neighborhood houses together under the ward sector
+    const key = slotFilter === "all"
+      ? ward.code
+      : `${ward.code}__${pSlot || "any"}`;
 
     if (!clusterMap.has(key)) {
       clusterMap.set(key, {
@@ -168,12 +181,23 @@ export function groupPickupsByWard(pickups = []) {
         requestedDate: p.requestedDate,
         pickupCount: 0,
         totalEstimatedWeight: 0,
+        slotBreakdown: {
+          MORNING: 0,
+          AFTERNOON: 0,
+          EVENING: 0,
+          OTHER: 0,
+        },
         pickups: [],
       });
     }
 
     const cluster = clusterMap.get(key);
     cluster.pickupCount += 1;
+    if (pSlot === "MORNING") cluster.slotBreakdown.MORNING += 1;
+    else if (pSlot === "AFTERNOON") cluster.slotBreakdown.AFTERNOON += 1;
+    else if (pSlot === "EVENING") cluster.slotBreakdown.EVENING += 1;
+    else cluster.slotBreakdown.OTHER += 1;
+
     let weight = p.wasteQuantity;
     if (!weight) {
       if (p.quantityBand === "LARGE") weight = 15;

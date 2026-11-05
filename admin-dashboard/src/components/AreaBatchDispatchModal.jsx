@@ -8,44 +8,58 @@ import {
 } from "../api/admin";
 import { groupPickupsByWard } from "../utils/areaZoneService";
 
-export default function AreaBatchDispatchModal({ pickups = [], onClose }) {
+function formatSlotBadge(slot) {
+  const s = (slot || "").toUpperCase();
+  if (s === "MORNING") return "🌅 Morning (7-11 AM)";
+  if (s === "AFTERNOON") return "☀️ Afternoon (12-4 PM)";
+  if (s === "EVENING") return "🌆 Evening (4-7 PM)";
+  return "🕒 Regular Slot";
+}
+
+export default function AreaBatchDispatchModal({
+  pickups = [],
+  initialSelectedIds = null,
+  onClose,
+}) {
   const queryClient = useQueryClient();
+  const [slotFilter, setSlotFilter] = useState("all");
   const [selectedClusterKey, setSelectedClusterKey] = useState(null);
   const [selectedVehicleId, setSelectedVehicleId] = useState("");
-  const [selectedPickupIds, setSelectedPickupIds] = useState(new Set());
+  const [selectedPickupIds, setSelectedPickupIds] = useState(
+    initialSelectedIds ? new Set(initialSelectedIds) : new Set()
+  );
   const [errorMsg, setErrorMsg] = useState(null);
 
-  // 1. Instant client-side cluster derivation (0ms delay)
+  // 1. Instant client-side cluster derivation with time-slot support (0ms delay)
   const clientClusters = useMemo(() => {
-    return groupPickupsByWard(pickups);
-  }, [pickups]);
+    return groupPickupsByWard(pickups, { slotFilter });
+  }, [pickups, slotFilter]);
 
-  // 2. Fetch fleet vehicles (standard cached query across admin portal)
+  // 2. Fetch fleet vehicles (cached query across admin portal)
   const { data: vehiclesData } = useQuery({
     queryKey: ["adminVehicles"],
     queryFn: getVehicles,
   });
 
-  // 3. Background server-side cluster query (non-blocking)
-  const {
-    data: serverData,
-    isLoading: isServerLoading,
-    isError: isServerError,
-    error: serverError,
-  } = useQuery({
-    queryKey: ["area-clusters"],
-    queryFn: () => getAreaClusters({ status: "requested" }),
+  // 3. Background server-side cluster query
+  const { data: serverData, isLoading: isServerLoading } = useQuery({
+    queryKey: ["area-clusters", slotFilter],
+    queryFn: () =>
+      getAreaClusters({
+        status: "requested",
+        ...(slotFilter !== "all" ? { slotPeriod: slotFilter } : {}),
+      }),
     staleTime: 15000,
     retry: 1,
   });
 
-  // Prefer server clusters once available, otherwise use instant client clusters
+  // Prefer server clusters once available if they have data, otherwise instant client clusters
   const clusters =
     serverData?.clusters && serverData.clusters.length > 0
       ? serverData.clusters
       : clientClusters;
 
-  // Prefer server vehicles once available, otherwise format from standard getVehicles
+  // Format available vehicles
   const availableVehicles = useMemo(() => {
     if (serverData?.availableVehicles && serverData.availableVehicles.length > 0) {
       return serverData.availableVehicles;
@@ -76,17 +90,27 @@ export default function AreaBatchDispatchModal({ pickups = [], onClose }) {
   const currentKey = selectedClusterKey || activeCluster?.clusterKey;
   const currentCluster = clusters.find((c) => c.clusterKey === currentKey);
 
-  // Auto-populate selected pickups when active cluster loads or changes
+  // Auto-populate selected pickups on first cluster load if none selected
   useEffect(() => {
-    if (currentCluster && currentCluster.pickups) {
+    if (currentCluster && currentCluster.pickups && selectedPickupIds.size === 0) {
       setSelectedPickupIds(new Set(currentCluster.pickups.map((p) => p.id)));
     }
-  }, [currentKey, currentCluster?.pickups?.length]);
+  }, [currentKey]);
 
   const handleSelectCluster = (c) => {
     setSelectedClusterKey(c.clusterKey);
     setSelectedPickupIds(new Set(c.pickups.map((p) => p.id)));
     setErrorMsg(null);
+  };
+
+  const handleSelectAll = () => {
+    if (currentCluster) {
+      setSelectedPickupIds(new Set(currentCluster.pickups.map((p) => p.id)));
+    }
+  };
+
+  const handleDeselectAll = () => {
+    setSelectedPickupIds(new Set());
   };
 
   const togglePickup = (id) => {
@@ -99,12 +123,25 @@ export default function AreaBatchDispatchModal({ pickups = [], onClose }) {
     setSelectedPickupIds(next);
   };
 
+  // Calculate selected total weight
+  const selectedWeight = useMemo(() => {
+    if (!currentCluster) return 0;
+    return currentCluster.pickups
+      .filter((p) => selectedPickupIds.has(p.id))
+      .reduce((sum, p) => {
+        const w =
+          p.wasteQuantity ||
+          (p.quantityBand === "LARGE" ? 15 : p.quantityBand === "MEDIUM" ? 8 : 3);
+        return sum + Number(w);
+      }, 0);
+  }, [currentCluster, selectedPickupIds]);
+
   const batchMutation = useMutation({
     mutationFn: async (payload) => {
       try {
         return await batchAssignArea(payload);
       } catch (err) {
-        // If batch endpoint returns 404 (endpoint still deploying on Render), fallback to atomic individual assignments
+        // Fallback to sequential individual assignments if batch endpoint has a network delay or 404
         if (
           err.status === 404 ||
           err.message?.includes("Not found") ||
@@ -151,26 +188,25 @@ export default function AreaBatchDispatchModal({ pickups = [], onClose }) {
     batchMutation.mutate({
       vehicleId: selectedVehicleId,
       pickupIds,
-      slotPeriod: currentCluster?.slotPeriod,
+      slotPeriod: slotFilter !== "all" ? slotFilter : currentCluster?.slotPeriod,
       requestedDate: currentCluster?.requestedDate,
     });
   };
 
-  // Only show blocking spinner if we have absolutely 0 data (neither local pickups nor server response)
   const isBlockingLoading =
     clusters.length === 0 && isServerLoading && !serverData && pickups.length === 0;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-xs">
-      <div className="relative w-full max-w-3xl rounded-2xl bg-white shadow-2xl border border-neutral-200 overflow-hidden flex flex-col max-h-[90vh]">
+      <div className="relative w-full max-w-4xl rounded-2xl bg-white shadow-2xl border border-neutral-200 overflow-hidden flex flex-col max-h-[90vh]">
         {/* Header */}
         <div className="flex items-center justify-between border-b border-neutral-200 px-6 py-4 bg-emerald-50/50">
           <div>
             <h2 className="text-lg font-bold text-neutral-900 flex items-center gap-2">
-              <span className="text-xl">📍</span> Area-Wise Batch Dispatch
+              <span className="text-xl">📍</span> Area-Wise Batch Dispatch & Routing
             </h2>
             <p className="text-xs text-neutral-500">
-              Cluster nearby doorstep pickups by neighborhood sector and assign 1 vehicle for sequential collection.
+              Group nearby doorstep pickups by neighborhood sector and time slot to dispatch 1 vehicle for collection.
             </p>
           </div>
           <button
@@ -179,6 +215,43 @@ export default function AreaBatchDispatchModal({ pickups = [], onClose }) {
           >
             ✕
           </button>
+        </div>
+
+        {/* Time Slot Filter Bar */}
+        <div className="border-b border-neutral-200 bg-neutral-50/80 px-6 py-2.5 flex flex-wrap items-center justify-between gap-3">
+          <div className="flex items-center gap-2">
+            <span className="text-xs font-bold text-neutral-700 flex items-center gap-1.5">
+              <span>🕒</span> Time Slot:
+            </span>
+            <div className="flex items-center gap-1">
+              {[
+                { id: "all", label: "All Slots" },
+                { id: "MORNING", label: "🌅 Morning" },
+                { id: "AFTERNOON", label: "☀️ Afternoon" },
+                { id: "EVENING", label: "🌆 Evening" },
+              ].map((slot) => (
+                <button
+                  key={slot.id}
+                  type="button"
+                  onClick={() => {
+                    setSlotFilter(slot.id);
+                    setSelectedPickupIds(new Set());
+                  }}
+                  className={`px-3 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
+                    slotFilter === slot.id
+                      ? "bg-emerald-600 text-white shadow-xs"
+                      : "bg-white text-neutral-700 border border-neutral-200 hover:bg-neutral-100"
+                  }`}
+                >
+                  {slot.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="text-xs text-neutral-500">
+            Showing <strong className="text-neutral-800">{clusters.length}</strong> neighborhood sectors
+          </div>
         </div>
 
         {/* Content Body */}
@@ -193,7 +266,7 @@ export default function AreaBatchDispatchModal({ pickups = [], onClose }) {
           {!isBlockingLoading && clusters.length === 0 && (
             <div className="py-12 text-center text-xs text-neutral-500">
               <span className="text-2xl block mb-2">✅</span>
-              No unassigned pickup requests pending in the queue.
+              No pending pickup requests found for this time slot.
             </div>
           )}
 
@@ -203,16 +276,25 @@ export default function AreaBatchDispatchModal({ pickups = [], onClose }) {
               <div className="md:col-span-5 space-y-2 border-r border-neutral-100 pr-0 md:pr-4">
                 <div className="flex items-center justify-between mb-2">
                   <label className="text-xs font-bold text-neutral-700 uppercase tracking-wider">
-                    Neighborhood Sectors ({clusters.length})
+                    Sectors ({clusters.length})
                   </label>
                   <span className="text-[10px] font-semibold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
-                    Auto-Clustered
+                    {slotFilter === "all" ? "All Slots" : slotFilter}
                   </span>
                 </div>
 
                 <div className="space-y-2 max-h-[380px] overflow-y-auto pr-1">
                   {clusters.map((c) => {
                     const isSelected = (currentKey || clusters[0]?.clusterKey) === c.clusterKey;
+                    const breakdown = c.slotBreakdown || {};
+                    const breakdownText = [
+                      breakdown.MORNING ? `${breakdown.MORNING} Morning` : null,
+                      breakdown.AFTERNOON ? `${breakdown.AFTERNOON} Afternoon` : null,
+                      breakdown.EVENING ? `${breakdown.EVENING} Evening` : null,
+                    ]
+                      .filter(Boolean)
+                      .join(", ");
+
                     return (
                       <div
                         key={c.clusterKey}
@@ -226,12 +308,14 @@ export default function AreaBatchDispatchModal({ pickups = [], onClose }) {
                         <div className="flex items-center justify-between">
                           <span className="font-bold text-xs text-neutral-900">{c.wardName}</span>
                           <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-bold text-emerald-800">
-                            {c.pickupCount} stops
+                            {c.pickupCount} {c.pickupCount === 1 ? "stop" : "stops"}
                           </span>
                         </div>
                         <div className="mt-1 flex items-center justify-between text-[11px] text-neutral-500">
                           <span>Est. {(c.totalEstimatedWeight || 0).toFixed(1)} kg</span>
-                          <span className="capitalize">{c.slotPeriod?.toLowerCase() || "Morning"}</span>
+                          <span className="font-medium text-emerald-700 truncate max-w-[140px]">
+                            {breakdownText || (c.slotPeriod ? formatSlotBadge(c.slotPeriod) : "All Slots")}
+                          </span>
                         </div>
                       </div>
                     );
@@ -244,46 +328,72 @@ export default function AreaBatchDispatchModal({ pickups = [], onClose }) {
                 {currentCluster && (
                   <>
                     <div className="flex items-center justify-between">
-                      <label className="text-xs font-bold text-neutral-700 uppercase tracking-wider">
-                        Doorstep Stops in {currentCluster.wardName}
-                      </label>
-                      <span className="text-[11px] font-medium text-emerald-700">
-                        {selectedPickupIds.size} of {currentCluster.pickups.length} selected
-                      </span>
+                      <div>
+                        <label className="text-xs font-bold text-neutral-700 uppercase tracking-wider block">
+                          Stops in {currentCluster.wardName}
+                        </label>
+                        <span className="text-[11px] text-emerald-700 font-semibold">
+                          {selectedPickupIds.size} of {currentCluster.pickups.length} selected ({selectedWeight.toFixed(1)} kg)
+                        </span>
+                      </div>
+
+                      {/* Multi-Select Quick Action Buttons */}
+                      <div className="flex items-center gap-1.5">
+                        <button
+                          type="button"
+                          onClick={handleSelectAll}
+                          className="px-2.5 py-1 text-[11px] font-bold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 rounded-lg transition-colors cursor-pointer"
+                        >
+                          Select All ({currentCluster.pickups.length})
+                        </button>
+                        <button
+                          type="button"
+                          onClick={handleDeselectAll}
+                          className="px-2.5 py-1 text-[11px] font-semibold text-neutral-500 hover:text-neutral-700 hover:bg-neutral-100 border border-neutral-200 rounded-lg transition-colors cursor-pointer"
+                        >
+                          Deselect All
+                        </button>
+                      </div>
                     </div>
 
                     {/* Pickup list check items */}
-                    <div className="space-y-2 max-h-[220px] overflow-y-auto border border-neutral-200 rounded-xl p-2 bg-neutral-50/50">
+                    <div className="space-y-2 max-h-[240px] overflow-y-auto border border-neutral-200 rounded-xl p-2 bg-neutral-50/50">
                       {currentCluster.pickups.map((p) => {
                         const isChecked = selectedPickupIds.has(p.id);
                         return (
                           <div
                             key={p.id}
                             onClick={() => togglePickup(p.id)}
-                            className={`flex items-start gap-2.5 p-2 rounded-lg border cursor-pointer transition-colors shadow-2xs ${
+                            className={`flex items-start gap-3 p-2.5 rounded-xl border cursor-pointer transition-all shadow-2xs select-none ${
                               isChecked
-                                ? "bg-white border-emerald-300"
-                                : "bg-white/60 border-neutral-200 opacity-60"
+                                ? "bg-white border-emerald-400 ring-1 ring-emerald-500/20"
+                                : "bg-white/60 border-neutral-200 hover:border-neutral-300 opacity-60"
                             }`}
                           >
                             <input
                               type="checkbox"
                               checked={isChecked}
-                              onChange={() => {}}
-                              className="mt-0.5 rounded text-emerald-600 focus:ring-emerald-500 cursor-pointer"
+                              onClick={(e) => e.stopPropagation()}
+                              onChange={() => togglePickup(p.id)}
+                              className="mt-1 h-4 w-4 rounded text-emerald-600 focus:ring-emerald-500 cursor-pointer"
                             />
                             <div className="flex-1 min-w-0">
-                              <div className="flex items-center justify-between">
+                              <div className="flex items-center justify-between gap-2">
                                 <span className="font-semibold text-xs text-neutral-900 truncate">
                                   {p.user?.name || "Citizen"}
                                 </span>
-                                <span className="text-[11px] font-semibold text-neutral-600">
-                                  {p.wasteType} · {p.wasteQuantity ? `${p.wasteQuantity} kg` : p.quantityBand}
+                                <span className="inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[10px] font-bold bg-neutral-100 text-neutral-800 border border-neutral-200 whitespace-nowrap">
+                                  {formatSlotBadge(p.slotPeriod)}
                                 </span>
                               </div>
-                              <p className="text-[11px] text-neutral-500 truncate" title={p.address}>
-                                {p.address}
-                              </p>
+                              <div className="flex items-center justify-between text-[11px] text-neutral-500 mt-1">
+                                <span className="truncate max-w-[210px]" title={p.address}>
+                                  📍 {p.address}
+                                </span>
+                                <span className="font-semibold text-emerald-800 whitespace-nowrap">
+                                  {p.wasteType} · {p.wasteQuantity ? `${p.wasteQuantity} kg` : p.quantityBand || "3.5 kg"}
+                                </span>
+                              </div>
                             </div>
                           </div>
                         );
@@ -341,7 +451,7 @@ export default function AreaBatchDispatchModal({ pickups = [], onClose }) {
           </button>
           <button
             onClick={handleDispatch}
-            disabled={batchMutation.isPending || clusters.length === 0}
+            disabled={batchMutation.isPending || clusters.length === 0 || selectedPickupIds.size === 0}
             className="rounded-xl bg-emerald-600 px-5 py-2 text-xs font-bold text-white shadow-xs hover:bg-emerald-700 disabled:opacity-50 transition-colors flex items-center gap-2 cursor-pointer"
           >
             {batchMutation.isPending ? (
