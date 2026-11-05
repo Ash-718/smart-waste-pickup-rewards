@@ -11,6 +11,14 @@ import AssignVehicleModal from "../components/AssignVehicleModal";
 import RejectPickupModal from "../components/RejectPickupModal";
 import AreaBatchDispatchModal from "../components/AreaBatchDispatchModal";
 import { resolvePickupWard, SANGLI_WARDS } from "../utils/areaZoneService";
+import {
+  PinIcon,
+  LightningIcon,
+  VehicleIcon,
+  PickupIcon,
+  ClockIcon,
+  CheckCircleIcon,
+} from "../components/Icons";
 
 const STATUS_FILTERS = ["all", "requested", "assigned", "completed", "rejected", "cancelled"];
 
@@ -116,8 +124,11 @@ export default function PickupQueuePage() {
               onChange={(e) => setSearchTerm(e.target.value)}
               className="w-full rounded-xl border border-neutral-300 bg-white pl-8 pr-3 py-1.5 text-xs text-neutral-900 placeholder:text-neutral-400 focus:border-emerald-600 focus:outline-hidden focus:ring-1 focus:ring-emerald-600 shadow-2xs"
             />
-            <span className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-neutral-400 text-xs">
-              🔍
+            <span className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-neutral-400">
+              <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                <circle cx="11" cy="11" r="8" />
+                <path d="m21 21-4.35-4.35" />
+              </svg>
             </span>
             {searchTerm && (
               <button
@@ -136,7 +147,7 @@ export default function PickupQueuePage() {
             onChange={(e) => setSectorFilter(e.target.value)}
             className="rounded-xl border border-neutral-300 bg-white px-2.5 py-1.5 text-xs font-semibold text-neutral-800 shadow-2xs focus:border-emerald-600 focus:outline-hidden cursor-pointer"
           >
-            <option value="all">📍 All Sectors</option>
+            <option value="all">All Sectors</option>
             {SANGLI_WARDS.map((w) => (
               <option key={w.code} value={w.code}>
                 {w.area} Sector
@@ -150,10 +161,10 @@ export default function PickupQueuePage() {
             onChange={(e) => setTimeSlotFilter(e.target.value)}
             className="rounded-xl border border-neutral-300 bg-white px-2.5 py-1.5 text-xs font-semibold text-neutral-800 shadow-2xs focus:border-emerald-600 focus:outline-hidden cursor-pointer"
           >
-            <option value="all">🕒 All Time Slots</option>
-            <option value="MORNING">🌅 Morning (7-11 AM)</option>
-            <option value="AFTERNOON">☀️ Afternoon (12-4 PM)</option>
-            <option value="EVENING">🌆 Evening (4-7 PM)</option>
+            <option value="all">All Time Slots</option>
+            <option value="MORNING">Morning (7-11 AM)</option>
+            <option value="AFTERNOON">Afternoon (12-4 PM)</option>
+            <option value="EVENING">Evening (4-7 PM)</option>
           </select>
 
           {/* Status Filters */}
@@ -162,9 +173,9 @@ export default function PickupQueuePage() {
               <button
                 key={s}
                 onClick={() => setStatusFilter(s)}
-                className={`rounded-lg px-2.5 py-1 text-xs font-semibold capitalize transition-colors ${
+                className={`rounded-lg px-2.5 py-1 text-xs font-semibold capitalize transition-all duration-150 active:scale-95 ${
                   statusFilter === s
-                    ? "bg-emerald-600 text-white shadow-xs"
+                    ? "bg-emerald-600 text-white shadow-xs font-bold"
                     : "text-neutral-600 hover:bg-neutral-100 hover:text-neutral-900"
                 }`}
               >
@@ -177,34 +188,39 @@ export default function PickupQueuePage() {
           <button
             type="button"
             onClick={() => setShowAreaBatchModal(true)}
-            className="flex items-center gap-1.5 rounded-xl bg-emerald-600 px-3.5 py-1.5 text-xs font-bold text-white shadow-2xs hover:bg-emerald-700 transition-colors cursor-pointer"
+            className="flex items-center gap-1.5 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-700 px-3.5 py-1.5 text-xs font-bold text-white shadow-xs hover:from-emerald-700 hover:to-teal-800 hover:shadow-md transition-all duration-200 active:scale-95 cursor-pointer"
           >
-            <span>📍</span> Batch Dispatch Area
+            <LightningIcon className="w-3.5 h-3.5" />
+            <span>Batch Dispatch</span>
           </button>
         </div>
       </div>
 
       {/* Area-Wise Municipal Cluster Banner */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-4 rounded-2xl bg-gradient-to-r from-emerald-50 via-teal-50 to-emerald-50 border border-emerald-200 shadow-xs">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-4 rounded-2xl bg-gradient-to-r from-emerald-50/80 via-teal-50/60 to-emerald-50/80 border border-emerald-200/90 shadow-2xs hover:shadow-sm hover:border-emerald-300 transition-all duration-300">
         <div className="flex items-center gap-3">
-          <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-600 text-white text-lg shadow-xs flex-shrink-0">
-            📍
+          <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-emerald-600 to-teal-700 text-white shadow-sm flex-shrink-0">
+            <VehicleIcon className="w-5 h-5" />
           </span>
           <div>
-            <h3 className="text-sm font-bold text-emerald-950">
-              Area-Wise Multi-Stop Batch Collection
+            <h3 className="text-sm font-bold text-emerald-950 flex items-center gap-2">
+              <span>Multi-Stop Neighborhood Batch Dispatch</span>
+              <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-bold text-emerald-800">
+                Optimized Routes
+              </span>
             </h3>
             <p className="text-xs text-emerald-700">
-              Cluster nearby houses in the same neighborhood (Vishrambag, Miraj, Kupwad) and dispatch 1 vehicle for sequential collection.
+              Cluster nearby doorstep pickups in the same neighborhood sector and assign 1 municipal vehicle for sequential collection.
             </p>
           </div>
         </div>
         <button
           type="button"
           onClick={() => setShowAreaBatchModal(true)}
-          className="inline-flex items-center justify-center gap-2 rounded-xl bg-emerald-600 px-4 py-2 text-xs font-bold text-white shadow-xs hover:bg-emerald-700 transition-all cursor-pointer whitespace-nowrap flex-shrink-0"
+          className="inline-flex items-center justify-center gap-2 rounded-xl bg-emerald-600 px-4 py-2 text-xs font-bold text-white shadow-xs hover:bg-emerald-700 hover:shadow-md transition-all duration-200 active:scale-95 cursor-pointer whitespace-nowrap flex-shrink-0"
         >
-          <span>⚡</span> Batch Dispatch Area Run
+          <LightningIcon className="w-3.5 h-3.5" />
+          <span>Launch Batch Dispatch</span>
         </button>
       </div>
 
@@ -303,7 +319,8 @@ export default function PickupQueuePage() {
                     {/* Sector / Ward badge */}
                     <td className="px-4 py-3.5 whitespace-nowrap">
                       <span className="inline-flex items-center gap-1 rounded-md bg-emerald-50 px-2 py-0.5 text-[11px] font-bold text-emerald-800 border border-emerald-200">
-                        📍 {resolvePickupWard(p).area}
+                        <PinIcon className="w-3 h-3 text-emerald-700" />
+                        <span>{resolvePickupWard(p).area}</span>
                       </span>
                     </td>
 
@@ -355,7 +372,7 @@ export default function PickupQueuePage() {
                         ) : (
                           <div className="truncate max-w-[160px] lg:max-w-[180px]">
                             <div className="font-semibold text-emerald-800 flex items-center gap-1.5 truncate">
-                              <span>🚛</span>
+                              <VehicleIcon className="w-3.5 h-3.5 text-emerald-700 flex-shrink-0" />
                               <span className="truncate">{p.assignments[0].vehicle.registrationNo}</span>
                             </div>
                             <div className="text-[11px] text-neutral-500 truncate">
@@ -389,10 +406,10 @@ export default function PickupQueuePage() {
                                 e.stopPropagation();
                                 setAssignPickupTarget(p);
                               }}
-                              className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-600 px-2.5 py-1.5 text-xs font-semibold text-white hover:bg-emerald-700 shadow-2xs whitespace-nowrap transition-colors"
+                              className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-600 px-2.5 py-1.5 text-xs font-semibold text-white hover:bg-emerald-700 shadow-2xs whitespace-nowrap transition-all duration-150 active:scale-95 cursor-pointer"
                               title="Accept pickup and assign vehicle/collector"
                             >
-                              <span>✓</span>
+                              <CheckCircleIcon className="w-3.5 h-3.5" />
                               <span>Accept</span>
                             </button>
 
@@ -402,7 +419,7 @@ export default function PickupQueuePage() {
                                 e.stopPropagation();
                                 setRejectPickupTarget(p);
                               }}
-                              className="inline-flex items-center gap-1.5 rounded-lg border border-rose-300 bg-rose-50 px-2.5 py-1.5 text-xs font-semibold text-rose-700 hover:bg-rose-100 hover:text-rose-800 shadow-2xs whitespace-nowrap transition-colors"
+                              className="inline-flex items-center gap-1.5 rounded-lg border border-rose-300 bg-rose-50 px-2.5 py-1.5 text-xs font-semibold text-rose-700 hover:bg-rose-100 hover:text-rose-800 shadow-2xs whitespace-nowrap transition-all duration-150 active:scale-95 cursor-pointer"
                               title="Reject pickup request"
                             >
                               <span>✕</span>
@@ -420,10 +437,10 @@ export default function PickupQueuePage() {
                                 e.stopPropagation();
                                 setAssignPickupTarget(p);
                               }}
-                              className="inline-flex items-center gap-1.5 rounded-lg border border-emerald-300 bg-emerald-50 px-2.5 py-1.5 text-xs font-semibold text-emerald-800 hover:bg-emerald-100 shadow-2xs whitespace-nowrap transition-colors"
+                              className="inline-flex items-center gap-1.5 rounded-lg border border-emerald-300 bg-emerald-50 px-2.5 py-1.5 text-xs font-semibold text-emerald-800 hover:bg-emerald-100 shadow-2xs whitespace-nowrap transition-all duration-150 active:scale-95 cursor-pointer"
                               title="Reassign vehicle or collector"
                             >
-                              <span>🚛</span>
+                              <VehicleIcon className="w-3.5 h-3.5 text-emerald-700" />
                               <span>Reassign</span>
                             </button>
 
@@ -433,7 +450,7 @@ export default function PickupQueuePage() {
                                 e.stopPropagation();
                                 setRejectPickupTarget(p);
                               }}
-                              className="inline-flex items-center gap-1.5 rounded-lg border border-rose-300 bg-rose-50 px-2.5 py-1.5 text-xs font-semibold text-rose-700 hover:bg-rose-100 hover:text-rose-800 shadow-2xs whitespace-nowrap transition-colors"
+                              className="inline-flex items-center gap-1.5 rounded-lg border border-rose-300 bg-rose-50 px-2.5 py-1.5 text-xs font-semibold text-rose-700 hover:bg-rose-100 hover:text-rose-800 shadow-2xs whitespace-nowrap transition-all duration-150 active:scale-95 cursor-pointer"
                               title="Reject pickup request"
                             >
                               <span>✕</span>
@@ -479,9 +496,10 @@ export default function PickupQueuePage() {
           <button
             type="button"
             onClick={() => setShowAreaBatchModal(true)}
-            className="rounded-xl bg-emerald-600 px-3.5 py-1.5 text-xs font-bold text-white hover:bg-emerald-500 transition-colors cursor-pointer flex items-center gap-1.5 shadow-xs"
+            className="rounded-xl bg-emerald-600 px-3.5 py-1.5 text-xs font-bold text-white hover:bg-emerald-500 active:scale-95 transition-all cursor-pointer flex items-center gap-1.5 shadow-xs"
           >
-            <span>⚡</span> Batch Dispatch Selected
+            <LightningIcon className="w-3.5 h-3.5" />
+            <span>Batch Dispatch Selected</span>
           </button>
           <button
             type="button"
