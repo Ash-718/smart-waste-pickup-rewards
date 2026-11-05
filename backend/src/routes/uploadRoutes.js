@@ -12,9 +12,17 @@ if (!fs.existsSync(uploadsDir)) {
   fs.mkdirSync(uploadsDir, { recursive: true });
 }
 
-const ALLOWED_MIME_TYPES = new Set(["image/jpeg", "image/png", "image/webp"]);
+const ALLOWED_MIME_TYPES = new Set([
+  "image/jpeg",
+  "image/jpg",
+  "image/pjpeg",
+  "image/png",
+  "image/webp",
+]);
 const MIME_TO_EXT = {
   "image/jpeg": ".jpg",
+  "image/jpg": ".jpg",
+  "image/pjpeg": ".jpg",
   "image/png": ".png",
   "image/webp": ".webp",
 };
@@ -39,9 +47,17 @@ const upload = multer({
     const rawExt = path.extname(file.originalname || "").toLowerCase();
     const validExts = new Set([".jpg", ".jpeg", ".png", ".webp"]);
 
-    if (!ALLOWED_MIME_TYPES.has(mime) || !validExts.has(rawExt)) {
+    // 1. Must be an allowed image MIME type
+    if (!ALLOWED_MIME_TYPES.has(mime)) {
       return cb(new HttpError(400, "Only JPEG, PNG, and WebP image uploads are allowed"));
     }
+
+    // 2. If a file extension is present in originalname, ensure it matches an allowed image extension.
+    // (Note: Mobile device uploads and Web Blobs often send extensionless names like 'blob' or '1000342', which are safe because storage.filename attaches a safe server-derived extension).
+    if (rawExt && !validExts.has(rawExt)) {
+      return cb(new HttpError(400, "Only JPEG, PNG, and WebP image uploads are allowed"));
+    }
+
     cb(null, true);
   },
 });

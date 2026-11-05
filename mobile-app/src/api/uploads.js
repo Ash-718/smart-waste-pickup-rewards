@@ -11,19 +11,41 @@ export async function uploadPickupPhoto(asset) {
     uri = `file://${uri}`;
   }
 
-  const filename = asset.fileName || uri.split("/").pop() || "pickup-photo.jpg";
-  const match = /\.(\w+)$/.exec(filename);
-  const type = match ? `image/${match[1].toLowerCase()}` : (asset.mimeType || "image/jpeg");
+  let filename = asset.fileName || asset.name || uri.split("/").pop() || "pickup-photo.jpg";
+  // Guarantee a valid image extension (fixes Android content:// URIs and phone camera uploads with no ext or .heic)
+  if (!/\.(jpe?g|png|webp)$/i.test(filename)) {
+    const base = filename.replace(/\.[^/.]+$/, "") || "pickup_photo";
+    filename = `${base}.jpg`;
+  }
 
-  if (asset.file) {
-    form.append("photo", asset.file);
-  } else if (Platform.OS === "web") {
-    try {
-      const res = await fetch(uri);
-      const blob = await res.blob();
-      form.append("photo", blob, filename);
-    } catch {
-      form.append("photo", { uri, name: filename, type });
+  const match = /\.(\w+)$/.exec(filename);
+  const ext = match ? match[1].toLowerCase() : "jpg";
+  const type = asset.type || asset.mimeType || `image/${ext === "jpg" ? "jpeg" : ext}`;
+
+  if (Platform.OS === "web") {
+    // On web, if asset has a converted uri (blob or data URI from compression), fetch it as a binary Blob
+    if (uri && (uri.startsWith("data:") || uri.startsWith("blob:"))) {
+      try {
+        const res = await fetch(uri);
+        const blob = await res.blob();
+        form.append("photo", blob, filename);
+      } catch {
+        if (asset.file) {
+          form.append("photo", asset.file, filename);
+        } else {
+          form.append("photo", { uri, name: filename, type });
+        }
+      }
+    } else if (asset.file) {
+      form.append("photo", asset.file, filename);
+    } else {
+      try {
+        const res = await fetch(uri);
+        const blob = await res.blob();
+        form.append("photo", blob, filename);
+      } catch {
+        form.append("photo", { uri, name: filename, type });
+      }
     }
   } else {
     // React Native FormData expects an object with uri, name, and type

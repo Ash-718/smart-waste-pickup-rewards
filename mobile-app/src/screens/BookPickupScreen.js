@@ -248,7 +248,10 @@ export default function BookPickupScreen({ navigation }) {
           ...selectedAsset,
           uri: manipResult.uri,
           type: "image/jpeg",
-          name: selectedAsset.name?.replace(/\.[^/.]+$/, ".jpg") || "pickup_photo.jpg",
+          mimeType: "image/jpeg",
+          name: "pickup_photo.jpg",
+          fileName: "pickup_photo.jpg",
+          file: null, // Explicitly clear uncompressed raw file so compressed image is sent
         };
       } catch (compErr) {
         // Fall back to original asset if manipulation fails

@@ -31,6 +31,14 @@
   ],
   "rewrites": [
     {
+      "source": "/api/:path*",
+      "destination": "https://smart-waste-pickup-rewards.onrender.com/api/:path*"
+    },
+    {
+      "source": "/uploads/:path*",
+      "destination": "https://smart-waste-pickup-rewards.onrender.com/uploads/:path*"
+    },
+    {
       "source": "/(.*)",
       "destination": "/index.html"
     }

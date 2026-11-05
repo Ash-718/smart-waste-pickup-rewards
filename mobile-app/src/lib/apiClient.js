@@ -16,6 +16,10 @@ function resolveApiBaseUrl() {
       if (hostname === "localhost" || hostname === "127.0.0.1") {
         return "http://localhost:4000/api";
       }
+      // If loaded over HTTPS (such as Vercel production deployment), never use insecure port 4000
+      if (window.location.protocol === "https:") {
+        return envUrl || "https://smart-waste-pickup-rewards.onrender.com/api";
+      }
       return `http://${hostname}:4000/api`;
     }
     return "http://localhost:4000/api";
