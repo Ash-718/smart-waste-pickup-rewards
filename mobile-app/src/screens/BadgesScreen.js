@@ -14,29 +14,20 @@ function getBadgeTier(badge) {
   const name = (badge.name || "").toLowerCase();
   const minPoints = badge.minPoints || 0;
 
-  if (name.includes("champion") || name.includes("platinum") || name.includes("diamond") || minPoints >= 200) {
+  // 1. Explicit name matching has absolute priority
+  if (name.includes("bronze")) {
     return {
-      tierName: "Diamond Tier",
-      badgeType: "diamond",
-      iconName: "sparkles",
-      primaryColor: "#0284c7", // Cyan 600
-      secondaryColor: "#e0f2fe", // Cyan 100
-      borderColor: "#7dd3fc", // Cyan 300
-      cardBorder: "#bae6fd",
+      tierName: "Bronze Tier",
+      badgeType: "bronze",
+      iconName: "ribbon",
+      primaryColor: "#c2410c", // Warm Orange / Bronze
+      secondaryColor: "#ffedd5", // Bronze 100
+      borderColor: "#fed7aa", // Bronze 300
+      cardBorder: "#fed7aa",
     };
   }
-  if (name.includes("gold") || minPoints >= 75) {
-    return {
-      tierName: "Gold Tier",
-      badgeType: "gold",
-      iconName: "trophy",
-      primaryColor: "#d97706", // Amber 600 / Gold
-      secondaryColor: "#fef3c7", // Amber 100
-      borderColor: "#fcd34d", // Amber 300
-      cardBorder: "#fde68a",
-    };
-  }
-  if (name.includes("silver") || minPoints >= 25) {
+
+  if (name.includes("silver")) {
     return {
       tierName: "Silver Tier",
       badgeType: "silver",
@@ -47,14 +38,74 @@ function getBadgeTier(badge) {
       cardBorder: "#e2e8f0",
     };
   }
+
+  if (name.includes("gold")) {
+    return {
+      tierName: "Gold Tier",
+      badgeType: "gold",
+      iconName: "trophy",
+      primaryColor: "#d97706", // Amber 600 / Gold
+      secondaryColor: "#fef3c7", // Amber 100
+      borderColor: "#fcd34d", // Amber 300
+      cardBorder: "#fde68a",
+    };
+  }
+
+  if (name.includes("champion") || name.includes("platinum") || name.includes("diamond")) {
+    return {
+      tierName: "Diamond Tier",
+      badgeType: "diamond",
+      iconName: "sparkles",
+      primaryColor: "#0284c7", // Cyan 600
+      secondaryColor: "#e0f2fe", // Cyan 100
+      borderColor: "#7dd3fc", // Cyan 300
+      cardBorder: "#bae6fd",
+    };
+  }
+
+  // 2. Fallback by minPoints threshold if badge has custom non-standard name
+  if (minPoints >= 300) {
+    return {
+      tierName: "Gold Tier",
+      badgeType: "gold",
+      iconName: "trophy",
+      primaryColor: "#d97706",
+      secondaryColor: "#fef3c7",
+      borderColor: "#fcd34d",
+      cardBorder: "#fde68a",
+    };
+  }
+  if (minPoints >= 150) {
+    return {
+      tierName: "Silver Tier",
+      badgeType: "silver",
+      iconName: "shield-checkmark",
+      primaryColor: "#475569",
+      secondaryColor: "#f1f5f9",
+      borderColor: "#cbd5e1",
+      cardBorder: "#e2e8f0",
+    };
+  }
+  if (minPoints >= 50) {
+    return {
+      tierName: "Bronze Tier",
+      badgeType: "bronze",
+      iconName: "ribbon",
+      primaryColor: "#c2410c",
+      secondaryColor: "#ffedd5",
+      borderColor: "#fed7aa",
+      cardBorder: "#fed7aa",
+    };
+  }
+
   return {
-    tierName: "Bronze Tier",
-    badgeType: "bronze",
-    iconName: "ribbon",
-    primaryColor: "#c2410c", // Warm Orange / Bronze
-    secondaryColor: "#ffedd5", // Bronze 100
-    borderColor: "#fed7aa", // Bronze 300
-    cardBorder: "#ffedd5",
+    tierName: "Green Tier",
+    badgeType: "green",
+    iconName: "leaf",
+    primaryColor: colors.brand700,
+    secondaryColor: colors.brand50,
+    borderColor: colors.brand200,
+    cardBorder: colors.brand200,
   };
 }
 

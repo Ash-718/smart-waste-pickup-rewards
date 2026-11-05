@@ -28,12 +28,45 @@ export default function HomeScreen({ navigation }) {
   const badgeLower = currentBadgeName.toLowerCase();
   const isGoldBadge = badgeLower.includes("gold");
   const isSilverBadge = badgeLower.includes("silver");
+  const isBronzeBadge = badgeLower.includes("bronze");
   const isDiamondBadge = badgeLower.includes("champion") || badgeLower.includes("platinum");
 
-  const badgeIconName = isGoldBadge ? "trophy" : isSilverBadge ? "shield-checkmark" : isDiamondBadge ? "sparkles" : "ribbon";
-  const badgeAccentColor = isGoldBadge ? "#d97706" : isSilverBadge ? "#475569" : isDiamondBadge ? "#0284c7" : colors.brand700;
-  const badgeBgColor = isGoldBadge ? "#fef3c7" : isSilverBadge ? "#f1f5f9" : isDiamondBadge ? "#e0f2fe" : colors.white;
-  const badgeBorderColor = isGoldBadge ? "#fcd34d" : isSilverBadge ? "#cbd5e1" : isDiamondBadge ? "#7dd3fc" : colors.brand200;
+  const badgeIconName = isGoldBadge
+    ? "trophy"
+    : isSilverBadge
+    ? "shield-checkmark"
+    : isBronzeBadge
+    ? "ribbon"
+    : isDiamondBadge
+    ? "sparkles"
+    : "ribbon";
+  const badgeAccentColor = isGoldBadge
+    ? "#d97706"
+    : isSilverBadge
+    ? "#475569"
+    : isBronzeBadge
+    ? "#c2410c"
+    : isDiamondBadge
+    ? "#0284c7"
+    : colors.brand700;
+  const badgeBgColor = isGoldBadge
+    ? "#fef3c7"
+    : isSilverBadge
+    ? "#f1f5f9"
+    : isBronzeBadge
+    ? "#ffedd5"
+    : isDiamondBadge
+    ? "#e0f2fe"
+    : colors.white;
+  const badgeBorderColor = isGoldBadge
+    ? "#fcd34d"
+    : isSilverBadge
+    ? "#cbd5e1"
+    : isBronzeBadge
+    ? "#fed7aa"
+    : isDiamondBadge
+    ? "#7dd3fc"
+    : colors.brand200;
 
   return (
     <Screen
