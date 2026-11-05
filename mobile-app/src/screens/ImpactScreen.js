@@ -8,6 +8,7 @@ import {
   View,
   Alert,
 } from "react-native";
+import { Ionicons } from "@expo/vector-icons";
 import Screen from "../components/Screen";
 import Card from "../components/Card";
 import ErrorState from "../components/ErrorState";
@@ -119,27 +120,43 @@ export default function ImpactScreen({ route }) {
           style={[styles.segmentBtn, activeView === "overview" && styles.segmentBtnActive]}
           onPress={() => setActiveView("overview")}
         >
-          <Text
-            style={[
-              styles.segmentText,
-              activeView === "overview" && styles.segmentTextActive,
-            ]}
-          >
-            🌱 Impact Overview
-          </Text>
+          <View style={{ flexDirection: "row", alignItems: "center" }}>
+            <Ionicons
+              name="leaf"
+              size={14}
+              color={activeView === "overview" ? colors.brand800 : colors.neutral500}
+              style={{ marginRight: 6 }}
+            />
+            <Text
+              style={[
+                styles.segmentText,
+                activeView === "overview" && styles.segmentTextActive,
+              ]}
+            >
+              Impact Overview
+            </Text>
+          </View>
         </Pressable>
         <Pressable
           style={[styles.segmentBtn, activeView === "reports" && styles.segmentBtnActive]}
           onPress={() => setActiveView("reports")}
         >
-          <Text
-            style={[
-              styles.segmentText,
-              activeView === "reports" && styles.segmentTextActive,
-            ]}
-          >
-            📑 Download Reports
-          </Text>
+          <View style={{ flexDirection: "row", alignItems: "center" }}>
+            <Ionicons
+              name="document-text"
+              size={14}
+              color={activeView === "reports" ? colors.brand800 : colors.neutral500}
+              style={{ marginRight: 6 }}
+            />
+            <Text
+              style={[
+                styles.segmentText,
+                activeView === "reports" && styles.segmentTextActive,
+              ]}
+            >
+              Download Reports
+            </Text>
+          </View>
         </Pressable>
       </View>
 
@@ -149,25 +166,33 @@ export default function ImpactScreen({ route }) {
           {/* Top Impact Grid */}
           <View style={styles.grid}>
             <Card style={styles.kpiCard}>
-              <Text style={styles.kpiEmoji}>♻️</Text>
+              <View style={[styles.kpiIconBadge, { backgroundColor: "#dcfce7" }]}>
+                <Ionicons name="repeat" size={17} color="#15803d" />
+              </View>
               <Text style={styles.kpiValue}>{totalWasteContributed} kg</Text>
               <Text style={styles.kpiLabel}>Waste Recycled</Text>
             </Card>
 
             <Card style={styles.kpiCard}>
-              <Text style={styles.kpiEmoji}>🚚</Text>
+              <View style={[styles.kpiIconBadge, { backgroundColor: "#e0f2fe" }]}>
+                <Ionicons name="cube" size={17} color="#0284c7" />
+              </View>
               <Text style={styles.kpiValue}>{completedPickupsCount}</Text>
               <Text style={styles.kpiLabel}>Pickups Completed</Text>
             </Card>
 
             <Card style={styles.kpiCard}>
-              <Text style={styles.kpiEmoji}>🌱</Text>
+              <View style={[styles.kpiIconBadge, { backgroundColor: "#fef3c7" }]}>
+                <Ionicons name="sparkles" size={17} color="#d97706" />
+              </View>
               <Text style={styles.kpiValue}>{totalPointsEarned}</Text>
               <Text style={styles.kpiLabel}>Green Points</Text>
             </Card>
 
             <Card style={styles.kpiCard}>
-              <Text style={styles.kpiEmoji}>🏅</Text>
+              <View style={[styles.kpiIconBadge, { backgroundColor: "#fef9c3" }]}>
+                <Ionicons name="trophy" size={17} color="#ca8a04" />
+              </View>
               <Text style={styles.kpiValue}>{currentBadge?.name || "Beginner"}</Text>
               <Text style={styles.kpiLabel}>Eco Level</Text>
             </Card>
@@ -288,9 +313,12 @@ export default function ImpactScreen({ route }) {
               onPress={() => handleDownload("pdf")}
               disabled={downloading !== null}
             >
-              <Text style={styles.downloadBtnText}>
-                {downloading === "pdf" ? "Generating..." : "📄 Download PDF Report"}
-              </Text>
+              <View style={{ flexDirection: "row", alignItems: "center" }}>
+                <Ionicons name="document-text" size={15} color="#fff" style={{ marginRight: 6 }} />
+                <Text style={styles.downloadBtnText}>
+                  {downloading === "pdf" ? "Generating..." : "Download PDF Report"}
+                </Text>
+              </View>
             </Pressable>
 
             <Pressable
@@ -298,34 +326,45 @@ export default function ImpactScreen({ route }) {
               onPress={() => handleDownload("csv")}
               disabled={downloading !== null}
             >
-              <Text style={[styles.downloadBtnText, styles.csvBtnText]}>
-                {downloading === "csv" ? "Exporting..." : "📊 Export CSV"}
-              </Text>
+              <View style={{ flexDirection: "row", alignItems: "center" }}>
+                <Ionicons name="download" size={15} color={colors.neutral800} style={{ marginRight: 6 }} />
+                <Text style={[styles.downloadBtnText, styles.csvBtnText]}>
+                  {downloading === "csv" ? "Exporting..." : "Export CSV"}
+                </Text>
+              </View>
             </Pressable>
           </View>
 
           {/* Period KPI Summary */}
           <View style={styles.grid}>
             <Card style={styles.kpiCard}>
-              <Text style={styles.kpiEmoji}>🚚</Text>
+              <View style={[styles.kpiIconBadge, { backgroundColor: "#e0f2fe" }]}>
+                <Ionicons name="calendar-outline" size={17} color="#0284c7" />
+              </View>
               <Text style={styles.kpiValue}>{citStats.totalPickups || 0}</Text>
               <Text style={styles.kpiLabel}>Total Requests</Text>
             </Card>
 
             <Card style={styles.kpiCard}>
-              <Text style={styles.kpiEmoji}>✅</Text>
+              <View style={[styles.kpiIconBadge, { backgroundColor: "#dcfce7" }]}>
+                <Ionicons name="checkmark-circle-outline" size={17} color="#15803d" />
+              </View>
               <Text style={styles.kpiValue}>{citStats.completedPickups || 0}</Text>
               <Text style={styles.kpiLabel}>Completed ({citStats.completionRate || 0}%)</Text>
             </Card>
 
             <Card style={styles.kpiCard}>
-              <Text style={styles.kpiEmoji}>♻️</Text>
+              <View style={[styles.kpiIconBadge, { backgroundColor: "#ecfdf5" }]}>
+                <Ionicons name="repeat" size={17} color="#059669" />
+              </View>
               <Text style={styles.kpiValue}>{citStats.totalVerifiedWasteKg || 0} kg</Text>
               <Text style={styles.kpiLabel}>Verified Recycled</Text>
             </Card>
 
             <Card style={styles.kpiCard}>
-              <Text style={styles.kpiEmoji}>🌱</Text>
+              <View style={[styles.kpiIconBadge, { backgroundColor: "#fef3c7" }]}>
+                <Ionicons name="sparkles" size={17} color="#d97706" />
+              </View>
               <Text style={styles.kpiValue}>+{citPoints.pointsEarnedInPeriod || 0}</Text>
               <Text style={styles.kpiLabel}>Points in Period</Text>
             </Card>
@@ -387,9 +426,12 @@ export default function ImpactScreen({ route }) {
                     <View style={styles.historyLeft}>
                       <Text style={styles.historyCategory}>{p.categoryLabel}</Text>
                       <Text style={styles.historyDate}>{p.date} • {p.quantityBand}</Text>
-                      <Text style={styles.historyAddress} numberOfLines={1}>
-                        📍 {p.address}
-                      </Text>
+                      <View style={{ flexDirection: "row", alignItems: "center", marginTop: 2 }}>
+                        <Ionicons name="location-outline" size={11} color="#64748b" style={{ marginRight: 3 }} />
+                        <Text style={styles.historyAddress} numberOfLines={1}>
+                          {p.address}
+                        </Text>
+                      </View>
                     </View>
                     <View style={styles.historyRight}>
                       <Text
@@ -552,9 +594,13 @@ const styles = StyleSheet.create({
     flexGrow: 1,
     padding: 14,
   },
-  kpiEmoji: {
-    fontSize: 20,
-    marginBottom: 4,
+  kpiIconBadge: {
+    width: 34,
+    height: 34,
+    borderRadius: 10,
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 8,
   },
   kpiValue: {
     color: colors.neutral900,

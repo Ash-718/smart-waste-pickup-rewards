@@ -361,9 +361,12 @@ export default function DriverHomeScreen({ navigation }) {
           activeTab === "active" && pickups.length > 1 ? (
             <View style={styles.areaRunBanner}>
               <View style={{ flex: 1 }}>
-                <Text style={styles.areaRunTitle}>
-                  📍 {pickups[0]?.ward?.area || "Neighborhood"} Area Run
-                </Text>
+                <View style={{ flexDirection: "row", alignItems: "center" }}>
+                  <Ionicons name="location" size={14} color="#059669" style={{ marginRight: 4 }} />
+                  <Text style={styles.areaRunTitle}>
+                    {pickups[0]?.ward?.area || "Neighborhood"} Area Run
+                  </Text>
+                </View>
                 <Text style={styles.areaRunSubtitle}>
                   {pickups.length} clustered stops assigned together for optimal collection
                 </Text>

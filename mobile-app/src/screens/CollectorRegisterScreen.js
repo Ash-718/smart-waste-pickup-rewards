@@ -15,10 +15,10 @@ import { applyCollector } from "../api/auth";
 import { colors } from "../theme/colors";
 
 const VEHICLE_PREFERENCES = [
-  { id: "electric_van", label: "⚡ Electric Mini Van (500kg)" },
-  { id: "electric_trike", label: "🛵 Electric Cargo Trike (250kg)" },
-  { id: "heavy_ev", label: "🚛 Eicher Pro EV Recycler (1000kg)" },
-  { id: "any", label: "🌱 Any Available Fleet Vehicle" },
+  { id: "electric_van", label: "Electric Mini Van (500kg)" },
+  { id: "electric_trike", label: "Electric Cargo Trike (250kg)" },
+  { id: "heavy_ev", label: "Eicher Pro EV Recycler (1000kg)" },
+  { id: "any", label: "Any Available Fleet Vehicle" },
 ];
 
 export default function CollectorRegisterScreen({ navigation }) {

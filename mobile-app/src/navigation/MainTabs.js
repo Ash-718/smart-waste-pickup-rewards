@@ -16,7 +16,7 @@ const TAB_ICONS = {
   Pickups: { active: "cube", inactive: "cube-outline" },
   Impact: { active: "leaf", inactive: "leaf-outline" },
   Rewards: { active: "gift", inactive: "gift-outline" },
-  Badges: { active: "ribbon", inactive: "ribbon-outline" },
+  Badges: { active: "trophy", inactive: "trophy-outline" },
 };
 
 function TabIcon({ routeName, focused }) {
@@ -27,7 +27,7 @@ function TabIcon({ routeName, focused }) {
     <View style={[styles.iconWrap, focused && styles.iconWrapActive]}>
       <Ionicons
         name={iconName}
-        size={21}
+        size={20}
         color={focused ? colors.brand700 : colors.neutral400}
       />
     </View>
@@ -46,19 +46,26 @@ export default function MainTabs() {
           backgroundColor: colors.white,
           borderTopColor: colors.neutral200,
           borderTopWidth: 1,
-          height: Platform.OS === "ios" ? 84 : 64,
+          height: Platform.OS === "ios" ? 86 : 70,
+          paddingTop: 6,
           paddingBottom: Platform.OS === "ios" ? 24 : 8,
-          paddingTop: 8,
-          elevation: 8,
+          elevation: 10,
           shadowColor: "#000",
           shadowOffset: { width: 0, height: -2 },
-          shadowOpacity: 0.04,
+          shadowOpacity: 0.05,
           shadowRadius: 6,
         },
+        tabBarItemStyle: {
+          paddingVertical: 2,
+          justifyContent: "center",
+          alignItems: "center",
+        },
         tabBarLabelStyle: {
-          fontSize: 11,
+          fontSize: 10.5,
           fontWeight: "600",
-          letterSpacing: 0.2,
+          letterSpacing: 0.1,
+          marginTop: 2,
+          marginBottom: 2,
         },
       })}
     >
@@ -75,9 +82,9 @@ const styles = StyleSheet.create({
   iconWrap: {
     alignItems: "center",
     justifyContent: "center",
-    width: 38,
-    height: 28,
-    borderRadius: 14,
+    width: 34,
+    height: 26,
+    borderRadius: 13,
   },
   iconWrapActive: {
     backgroundColor: colors.brand50,

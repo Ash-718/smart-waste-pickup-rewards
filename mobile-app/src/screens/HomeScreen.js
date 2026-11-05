@@ -24,6 +24,17 @@ export default function HomeScreen({ navigation }) {
   const impact = impactQuery.data || {};
   const thisMonth = impact.thisMonth || {};
 
+  const currentBadgeName = impact.currentBadge?.name || "Eco Citizen";
+  const badgeLower = currentBadgeName.toLowerCase();
+  const isGoldBadge = badgeLower.includes("gold");
+  const isSilverBadge = badgeLower.includes("silver");
+  const isDiamondBadge = badgeLower.includes("champion") || badgeLower.includes("platinum");
+
+  const badgeIconName = isGoldBadge ? "trophy" : isSilverBadge ? "shield-checkmark" : isDiamondBadge ? "sparkles" : "ribbon";
+  const badgeAccentColor = isGoldBadge ? "#d97706" : isSilverBadge ? "#475569" : isDiamondBadge ? "#0284c7" : colors.brand700;
+  const badgeBgColor = isGoldBadge ? "#fef3c7" : isSilverBadge ? "#f1f5f9" : isDiamondBadge ? "#e0f2fe" : colors.white;
+  const badgeBorderColor = isGoldBadge ? "#fcd34d" : isSilverBadge ? "#cbd5e1" : isDiamondBadge ? "#7dd3fc" : colors.brand200;
+
   return (
     <Screen
       onRefresh={() => {
@@ -66,26 +77,35 @@ export default function HomeScreen({ navigation }) {
       <Card style={styles.impactCard}>
         <View style={styles.impactHeader}>
           <Text style={styles.impactCardTitle}>Environmental Impact</Text>
-          <View style={styles.badgePill}>
-            <Ionicons name="ribbon" size={13} color={colors.brand700} style={{ marginRight: 4 }} />
-            <Text style={styles.impactCardBadge}>
-              {impact.currentBadge?.name || "Eco Citizen"}
+          <View style={[styles.badgePill, { backgroundColor: badgeBgColor, borderColor: badgeBorderColor }]}>
+            <Ionicons name={badgeIconName} size={13} color={badgeAccentColor} style={{ marginRight: 4 }} />
+            <Text style={[styles.impactCardBadgeText, { color: badgeAccentColor }]}>
+              {currentBadgeName}
             </Text>
           </View>
         </View>
 
         <View style={styles.impactStatsRow}>
           <View style={styles.impactCol}>
+            <View style={[styles.statIconBadge, { backgroundColor: "#dcfce7" }]}>
+              <Ionicons name="repeat" size={14} color="#15803d" />
+            </View>
             <Text style={styles.impactValue}>{impact.totalWasteContributed || 0} kg</Text>
             <Text style={styles.impactLabel}>Waste Recycled</Text>
           </View>
           <View style={styles.impactDivider} />
           <View style={styles.impactCol}>
+            <View style={[styles.statIconBadge, { backgroundColor: "#e0f2fe" }]}>
+              <Ionicons name="cube" size={14} color="#0284c7" />
+            </View>
             <Text style={styles.impactValue}>{impact.completedPickupsCount || 0}</Text>
             <Text style={styles.impactLabel}>Pickups Done</Text>
           </View>
           <View style={styles.impactDivider} />
           <View style={styles.impactCol}>
+            <View style={[styles.statIconBadge, { backgroundColor: "#fef3c7" }]}>
+              <Ionicons name="sparkles" size={14} color="#d97706" />
+            </View>
             <Text style={styles.impactValue}>{impact.availablePoints ?? (balanceQuery.data?.balance || 0)}</Text>
             <Text style={styles.impactLabel}>Green Points</Text>
           </View>
@@ -265,16 +285,17 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     textTransform: "uppercase",
   },
-  impactCardBadge: {
-    backgroundColor: colors.white,
-    borderColor: colors.brand200,
-    borderRadius: 999,
-    borderWidth: 1,
-    color: colors.brand700,
+  impactCardBadgeText: {
     fontSize: 11,
-    fontWeight: "600",
-    paddingHorizontal: 8,
-    paddingVertical: 2,
+    fontWeight: "700",
+  },
+  statIconBadge: {
+    width: 26,
+    height: 26,
+    borderRadius: 8,
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 4,
   },
   impactStatsRow: {
     flexDirection: "row",
