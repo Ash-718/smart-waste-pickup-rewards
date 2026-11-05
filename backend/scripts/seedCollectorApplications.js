@@ -77,3 +77,4 @@ async function seed() {
 seed()
   .catch(console.error)
   .finally(() => prisma.$disconnect());
+
