@@ -422,6 +422,7 @@ export default function PickupQueuePage() {
 
       {showAreaBatchModal && (
         <AreaBatchDispatchModal
+          pickups={pickups}
           onClose={() => setShowAreaBatchModal(false)}
         />
       )}

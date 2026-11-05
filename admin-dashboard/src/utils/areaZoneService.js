@@ -138,3 +138,54 @@ export function resolvePickupWard(pickup) {
 
   return { code: "WARD-GENERAL", name: "General Sector", area: "General Ward" };
 }
+
+/**
+ * Groups a collection of pickups into area/ward clusters instantly on the client.
+ */
+export function groupPickupsByWard(pickups = []) {
+  const clusterMap = new Map();
+
+  for (const p of pickups) {
+    if (!p) continue;
+    // Only cluster requested/pending pickups
+    const status = (p.status || "").toLowerCase().trim();
+    if (status && status !== "requested") continue;
+
+    const ward = resolvePickupWard(p);
+    const dateStr = p.requestedDate
+      ? new Date(p.requestedDate).toISOString().split("T")[0]
+      : "any";
+    const slot = p.slotPeriod || "any";
+    const key = `${ward.code}__${slot}__${dateStr}`;
+
+    if (!clusterMap.has(key)) {
+      clusterMap.set(key, {
+        clusterKey: key,
+        wardCode: ward.code,
+        wardName: ward.name,
+        area: ward.area,
+        slotPeriod: p.slotPeriod,
+        requestedDate: p.requestedDate,
+        pickupCount: 0,
+        totalEstimatedWeight: 0,
+        pickups: [],
+      });
+    }
+
+    const cluster = clusterMap.get(key);
+    cluster.pickupCount += 1;
+    let weight = p.wasteQuantity;
+    if (!weight) {
+      if (p.quantityBand === "LARGE") weight = 15;
+      else if (p.quantityBand === "MEDIUM") weight = 8;
+      else weight = 3;
+    }
+    cluster.totalEstimatedWeight += Number(weight) || 0;
+    cluster.pickups.push({
+      ...p,
+      ward,
+    });
+  }
+
+  return Array.from(clusterMap.values()).sort((a, b) => b.pickupCount - a.pickupCount);
+}
