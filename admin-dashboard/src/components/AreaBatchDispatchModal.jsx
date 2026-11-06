@@ -350,10 +350,10 @@ export default function AreaBatchDispatchModal({
                 >
                   <option value="">-- Choose Municipal Vehicle --</option>
                   {availableVehicles.map((v) => (
-                    <option key={v.id} value={v.id} disabled={v.isEnRoute}>
+                    <option key={v.id} value={v.id}>
                       {v.registrationNo} — {v.driver?.name || "Unassigned"} ({v.type})
                       {v.isEnRoute
-                        ? " [Currently En Route]"
+                        ? " [En Route — will queue next]"
                         : v.activeAssignmentsCount > 0
                         ? ` [${v.activeAssignmentsCount} assigned]`
                         : " [Available]"}

@@ -89,26 +89,6 @@ async function assignVehicleToPickup({ pickupId, vehicleId, collectorId, adminUs
       );
     }
 
-    // Check for conflicting in-transit trips on this vehicle
-    const conflictingActiveTrip = await tx.pickupAssignment.findFirst({
-      where: {
-        vehicleId: vehicle.id,
-        isActive: true,
-        pickupId: { not: pickupId },
-        pickup: {
-          status: { in: ["on_the_way", "arrived"] },
-        },
-      },
-      include: { pickup: true },
-    });
-
-    if (conflictingActiveTrip) {
-      throw new HttpError(
-        409,
-        `Vehicle "${vehicle.registrationNo}" is currently en route for another active pickup (#${conflictingActiveTrip.pickup.id.slice(0, 8)}). Please wait for the current trip to complete or choose another vehicle.`
-      );
-    }
-
     // 3. Archive any existing active assignment on this pickup (preserve full history)
     await tx.pickupAssignment.updateMany({
       where: {
@@ -230,26 +210,6 @@ async function batchAssignVehicleToPickups({ pickupIds, vehicleId, adminUserId, 
       if (["completed", "cancelled", "rejected"].includes(p.status)) {
         throw new HttpError(400, `Cannot assign pickup #${p.id.slice(0, 8)}: already ${p.status}`);
       }
-    }
-
-    // 3. Check for conflicting in-transit trip on the vehicle
-    const conflictingActiveTrip = await tx.pickupAssignment.findFirst({
-      where: {
-        vehicleId: vehicle.id,
-        isActive: true,
-        pickupId: { notIn: pickupIds },
-        pickup: {
-          status: { in: ["on_the_way", "arrived"] },
-        },
-      },
-      include: { pickup: true },
-    });
-
-    if (conflictingActiveTrip) {
-      throw new HttpError(
-        409,
-        `Vehicle "${vehicle.registrationNo}" is currently en route for another active pickup (#${conflictingActiveTrip.pickup.id.slice(0, 8)}). Please wait for the current trip to complete.`
-      );
     }
 
     // 4. Archive any existing active assignments on all these pickups
